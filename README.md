@@ -46,7 +46,7 @@ This repo is that conversation turned into something you can run.
 
 # 3. The command prints the exact URL to open on your phone, e.g.
 #    https://gus.tail0940f.ts.net:8731
-#    Open it in SAFARI (not Chrome), Share, Add to Home Screen.
+#    Open it in SAFARI, Share, Add to Home Screen.
 
 # 4. Make it survive a reboot
 ~/Projects/nixweb.app/bin/nixweb install mytool 8731   # writes a systemd --user unit
@@ -130,6 +130,9 @@ Be honest about this up front, because finding out late is expensive.
 - **Background execution is limited.** It does not run when closed.
 - **Audio capture stops when the screen sleeps.** Playback survives the lock screen. These are
   different things and the difference matters: see [docs/03-iphone-gotchas.md](docs/03-iphone-gotchas.md).
-- **Safari only** for installing on iOS. Chrome and Firefox on iOS cannot do it.
+- **Install from Safari.** Since iOS 16.4 other browsers can Add to Home Screen too, but the icon then
+  opens inside that browser. Safari is the reference path and the one to test.
+- **Wake Lock does not work in an installed app on iOS 16.4 to 18.3.** It works from 18.4. Check the
+  phone's iOS version before promising screen-on recording.
 
 If you need any of the first four, you need a real app. For everything else, this is a better deal.

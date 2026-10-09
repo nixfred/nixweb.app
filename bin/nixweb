@@ -125,7 +125,7 @@ cmd_serve(){
   trap "ts_unexpose $port" EXIT
   local host; host="$(ts_name)"
   printf "\n  ${BOLD}Open this in SAFARI on your phone:${RS}\n\n    ${CY}https://%s:%s${RS}\n\n" "$host" "$port"
-  note "Then: Share → Add to Home Screen. Chrome/Firefox on iOS cannot install it."
+  note "Then: Share → Add to Home Screen. Test the install in Safari: other iOS browsers open the icon inside themselves."
   note "Tailnet only. Python listens on 127.0.0.1; tailscale serve fronts it with HTTPS."
   note "Serving $dir. Ctrl-C stops it and removes the tailnet mapping."
   echo

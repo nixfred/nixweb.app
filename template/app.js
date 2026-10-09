@@ -85,9 +85,10 @@ if (refresh) refresh.addEventListener('click', function () { location.reload(); 
 //      - Screen SLEEPS   -> audio CAPTURE stops. Your recording is cut off.
 //      - Phone LOCKS     -> audio PLAYBACK keeps going. Podcasts work fine.
 //
-//    Wake Lock keeps the screen awake so capture survives. Safari supports it
-//    from iOS 16.4, and it is released automatically when you background the app,
-//    so you must re-acquire on visibilitychange. Not a bug, by design.
+//    Wake Lock keeps the screen awake so capture survives. It works in a Safari tab
+//    from iOS 16.4, but in an INSTALLED home-screen app only from iOS 18.4 (it did
+//    nothing on 16.4 to 18.3, WebKit bug 254545). It is released automatically when
+//    you background the app, so you must re-acquire on visibilitychange. By design.
 // ---------------------------------------------------------------------------
 var wakeLock = null;
 async function keepAwake(on) {

@@ -5,9 +5,9 @@ know *why*, because you will meet them again in an app you did not start from th
 
 ## Installing
 
-- **Safari only.** Chrome and Firefox on iOS cannot Add to Home Screen. They are Safari underneath
-  but Apple does not expose installation to them. If someone says "it didn't work", ask which
-  browser before anything else.
+- **Install from Safari, and test there.** Since iOS 16.4 other browsers can Add to Home Screen too,
+  but the icon then opens inside that browser rather than as its own app. If someone says "it didn't
+  work", ask which browser and which iOS version before anything else.
 - **The icon must be a real file.** Without `apple-touch-icon` iOS screenshots your page and uses
   that. It looks broken and people lose faith in the whole idea immediately.
 - **`display: standalone`** is what removes the browser chrome. Without it you shipped a bookmark.
@@ -47,9 +47,16 @@ Two different things that people conflate, and Daniel hit both:
 | App backgrounded | stops | continues briefly |
 
 So: **a recording dies when the screen sleeps, and a podcast survives the lock screen.** If your app
-records, request a Wake Lock (`navigator.wakeLock`, Safari 16.4+) while recording. It is released
-automatically when the app is backgrounded, so you must re-acquire on `visibilitychange`. That is by
-design, not a bug.
+records, request a Wake Lock (`navigator.wakeLock`) while recording. It is released automatically
+when the app is backgrounded, so you must re-acquire on `visibilitychange`. That is by design, not a
+bug. **Version matters:** Wake Lock works in a Safari tab from 16.4, but in an installed Home Screen
+app it does not work from 16.4 to 18.3 and works from 18.4 (WebKit bug 254545). On an older phone,
+tell the user plainly that recording stops when the screen sleeps.
+
+Microphone capture has its own installed-app quirks. The permission prompt can come back on launch or
+when the page navigates, so keep a single page and one live stream. Safari records MP4 with AAC, and
+WebM with Opus only from 18.4, so choose the format with `MediaRecorder.isTypeSupported` and convert
+on the server before transcription.
 
 Some capabilities are only honoured once the app is **installed to the home screen** rather than
 running in a Safari tab. If a voice feature works for you and not for a tester, ask whether they
