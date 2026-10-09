@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# nixweb — make, serve and install home-screen web apps on the tailnet.
+# No framework, no build step, no npm. Deliberately.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APPS="${NIXWEB_APPS:-$HOME/Projects}"
+BOLD=$'\e[1m'; DIM=$'\e[2m'; CY=$'\e[36m'; GR=$'\e[32m'; AM=$'\e[33m'; RD=$'\e[31m'; RS=$'\e[0m'
+
+die(){ printf "${RD}✗${RS} %s\n" "$1" >&2; exit 1; }
+ok(){  printf "${GR}✓${RS} %s\n" "$1"; }
+note(){ printf "${DIM}  %s${RS}\n" "$1"; }
+
+# The tailnet name of THIS host. Everything hangs off this: the phone must be able
+# to route to it, and localhost cannot be routed to from a phone.
+ts_name(){
+  if command -v tailscale >/dev/null 2>&1; then
+    tailscale status --json 2>/dev/null | python3 -c \
+      'import json,sys;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null && return 0
+  fi
+  hostname
+}
+
+usage(){ cat <<EOF
+${BOLD}nixweb${RS} — your own tools, on your phone, over Tailscale.
+
+  ${CY}nixweb new${RS} <name>              copy the template into \$NIXWEB_APPS/<name>
+  ${CY}nixweb icons${RS} <name> [emoji]    generate every icon size the manifest asks for
+  ${CY}nixweb serve${RS} <name> [port]     serve it on the tailnet and print the phone URL
+  ${CY}nixweb install${RS} <name> [port]   write + enable a systemd --user unit so it survives reboot
+  ${CY}nixweb check${RS} <name>            audit the app for the known iPhone traps
+  ${CY}nixweb hosts${RS}                   show where you could serve this
+
+Apps live in ${APPS} (override with \$NIXWEB_APPS).
+EOF
+}
+
+cmd_new(){
+  local name="${1:?nixweb new <name>}"; local dest="$APPS/$name"
+  [ -e "$dest" ] && die "$dest already exists"
+  mkdir -p "$dest"
+  cp -r "$ROOT/template/." "$dest/"
+  # Stamp the name through the template so nothing says NIXWEB on the home screen.
+  local Title="$(printf '%s' "$name" | sed 's/[-_]/ /g; s/\b\(.\)/\u\1/g')"
+  for f in index.html manifest.webmanifest; do
+    sed -i.bak "s/NIXWEB/${Title}/g" "$dest/$f" && rm -f "$dest/$f.bak"
+  done
+  ok "created $dest"
+  note "next: nixweb icons $name  →  nixweb serve $name"
+}
+
+cmd_icons(){
+  local name="${1:?nixweb icons <name> [glyph]}"
+  local dir="$APPS/$name/icons"; mkdir -p "$dir"
+  # Default glyph: the app's initials. Emoji are DELIBERATELY not the default:
+  # ImageMagick renders them as a blank tile unless an emoji font is installed,
+  # and a blank tile is the exact failure this tool exists to prevent.
+  local glyph="${2:-$(printf '%s' "$name" | sed 's/[^A-Za-z]//g' | cut -c1-2 | tr '[:lower:]' '[:upper:]')}"
+  local IM; IM="$(command -v magick || command -v convert)" || die "ImageMagick not found (pacman -S imagemagick)"
+
+  for s in 180 192 512; do
+    "$IM" -size ${s}x${s} xc:'#0b1018' -fill '#00f0ff' \
+      -gravity center -pointsize $((s*42/100)) -annotate 0 "$glyph" \
+      "$dir/icon-${s}.png" 2>/dev/null || die "icon render failed"
+  done
+  # Maskable needs ~20% padding or Android crops the glyph under a circular mask.
+  "$IM" -size 512x512 xc:'#0b1018' -fill '#00f0ff' \
+    -gravity center -pointsize 160 -annotate 0 "$glyph" "$dir/icon-maskable-512.png"
+
+  # VERIFY. A tile with one colour means the glyph did not render (missing font,
+  # unsupported emoji). Fail loudly rather than shipping an invisible icon.
+  local colours
+  colours="$("$IM" "$dir/icon-512.png" -format "%k" info: 2>/dev/null || echo 1)"
+  if [ "${colours:-1}" -le 1 ]; then
+    rm -f "$dir"/icon-*.png
+    die "glyph '$glyph' rendered blank (no font for it). Try letters: nixweb icons $name AB"
+  fi
+  ok "icons written to $dir  (glyph: $glyph, $colours colours)"
+}
+
+cmd_serve(){
+  local name="${1:?nixweb serve <name> [port]}"; local port="${2:-8731}"
+  local dir="$APPS/$name"; [ -d "$dir" ] || die "no such app: $dir"
+  local host; host="$(ts_name)"
+  printf "\n  ${BOLD}Open this in SAFARI on your phone:${RS}\n\n    ${CY}http://%s:%s${RS}\n\n" "$host" "$port"
+  note "Then: Share → Add to Home Screen. Chrome/Firefox on iOS cannot install it."
+  note "Serving $dir — Ctrl-C to stop."
+  echo
+  # Bind 0.0.0.0 so the tailnet interface is included. On a laptop that also sits on
+  # untrusted wifi, prefer binding the tailnet IP only: see docs/04.
+  cd "$dir" && exec python3 -m http.server "$port" --bind 0.0.0.0
+}
+
+cmd_install(){
+  local name="${1:?nixweb install <name> [port]}"; local port="${2:-8731}"
+  local dir="$APPS/$name"; [ -d "$dir" ] || die "no such app: $dir"
+  local unit="$HOME/.config/systemd/user/nixweb-$name.service"
+  mkdir -p "$(dirname "$unit")"
+  cat > "$unit" <<UNIT
+[Unit]
+Description=nixweb: $name
+After=network-online.target
+
+[Service]
+WorkingDirectory=$dir
+ExecStart=/usr/bin/python3 -m http.server $port --bind 0.0.0.0
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+UNIT
+  systemctl --user daemon-reload
+  systemctl --user enable --now "nixweb-$name.service"
+  ok "nixweb-$name.service enabled and started on port $port"
+  note "logs: journalctl --user -u nixweb-$name -f"
+  note "survive logout: loginctl enable-linger $USER"
+}
+
+cmd_check(){
+  local name="${1:?nixweb check <name>}"; local dir="$APPS/$name"
+  [ -d "$dir" ] || die "no such app: $dir"
+  local idx="$dir/index.html" css="$dir/app.css" fails=0
+  chk(){ if grep -q "$1" $2 2>/dev/null; then ok "$3"; else printf "${AM}⚠${RS} %s\n" "$3"; fails=$((fails+1)); fi; }
+  echo "${BOLD}Auditing $name${RS}"
+  chk 'viewport-fit=cover'            "$idx" "viewport-fit=cover (needed or safe-area insets are always 0)"
+  chk 'apple-mobile-web-app-capable'  "$idx" "apple-mobile-web-app-capable"
+  chk 'apple-touch-icon'              "$idx" "apple-touch-icon (or the home screen shows a screenshot)"
+  chk 'manifest'                      "$idx" "manifest linked"
+  chk 'user-select'                   "$css" "text selection controlled (drag does not highlight)"
+  chk 'safe-area-inset'               "$css" "safe-area insets used (clears notch + home indicator)"
+  chk 'overscroll-behavior'           "$css" "overscroll-behavior (no whole-page rubber band)"
+  chk 'touch-action'                  "$css" "touch-action: manipulation (no 300ms tap delay)"
+  [ -f "$dir/sw.js" ] && ok "service worker present (offline shows your app, not a browser error)" \
+    || { printf "${AM}⚠${RS} no service worker\n"; fails=$((fails+1)); }
+  [ -f "$dir/icons/icon-180.png" ] && ok "icons generated" \
+    || { printf "${AM}⚠${RS} icons missing — run: nixweb icons $name\n"; fails=$((fails+1)); }
+  echo
+  [ "$fails" -eq 0 ] && ok "clean" || printf "${AM}%s thing(s) to fix${RS}\n" "$fails"
+}
+
+cmd_hosts(){
+  printf "\n  ${BOLD}Where you can serve this${RS}\n\n"
+  printf "  %-8s %s\n" "gus"   "desk machine, RTX 5070 — GPU work, at-home tools"
+  printf "  %-8s %s\n" "vic"   "mobile Arch laptop — tools that follow the laptop"
+  printf "  %-8s %s\n" "fnix"  "MacBook Pro M4 Max — anything needing macOS or Apple APIs"
+  printf "  %-8s %s\n" "red"   "VPS — always on"
+  printf "  %-8s %s\n" "blu"   "VPS — always on"
+  printf "  %-8s %s\n" "whi"   "VPS — always on, holds the fleet secrets vault"
+  printf "\n  this host: ${CY}%s${RS}\n\n" "$(ts_name)"
+  note "Start where the data already is. Move to a VPS when 'is my laptop awake?' blocks you."
+}
+
+case "${1:-}" in
+  new)     shift; cmd_new "$@" ;;
+  icons)   shift; cmd_icons "$@" ;;
+  serve)   shift; cmd_serve "$@" ;;
+  install) shift; cmd_install "$@" ;;
+  check)   shift; cmd_check "$@" ;;
+  hosts)   shift; cmd_hosts "$@" ;;
+  ""|-h|--help|help) usage ;;
+  *) die "unknown command: $1" ;;
+esac
