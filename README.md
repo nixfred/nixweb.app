@@ -27,7 +27,7 @@ This repo is that conversation turned into something you can run.
 ## The whole idea in six lines
 
 1. Your tool already serves HTTP on some port on one of your machines.
-2. Bind it to the tailnet instead of `127.0.0.1`.
+2. Keep it on `127.0.0.1` and put `tailscale serve` in front: HTTPS, tailnet only.
 3. Add a `manifest.webmanifest`, a handful of Apple meta tags, and a real icon.
 4. Open it in **Safari** on the phone. Share. **Add to Home Screen**.
 5. It now has its own icon, its own window with no browser chrome, and its own slot in the app switcher.
@@ -41,11 +41,11 @@ This repo is that conversation turned into something you can run.
 # 1. Make a new app from the template
 ~/Projects/nixweb.app/bin/nixweb new mytool
 
-# 2. Serve it on the tailnet (not localhost)
+# 2. Serve it on the tailnet over HTTPS (python stays on 127.0.0.1)
 ~/Projects/nixweb.app/bin/nixweb serve mytool 8731
 
 # 3. The command prints the exact URL to open on your phone, e.g.
-#    http://gus.tail0940f.ts.net:8731
+#    https://gus.tail0940f.ts.net:8731
 #    Open it in SAFARI (not Chrome), Share, Add to Home Screen.
 
 # 4. Make it survive a reboot
@@ -67,7 +67,9 @@ them is in `template/` already.
 | 300ms tap lag | Everything feels half a second behind | `touch-action: manipulation` |
 | Default globe icon | Looks broken on the home screen | `apple-touch-icon` + manifest icons |
 | Browser chrome visible | It is obviously a website | `display: standalone` |
-| Dead tailnet shows a browser error | Looks like your app broke | service worker shell cache |
+| Dead tailnet shows a browser error | Looks like your app broke | service worker shell cache (needs HTTPS, so `nixweb serve` provides it) |
+| "Can't reach home" on first run | Offline banner on a healthy app | `server.py` answers `/ping`; a bare static server 404s it |
+| `.git` and `.env` readable | Whole history served to the tailnet | `server.py` 404s any dotfile path |
 | Recording stops when the screen sleeps | Voice features silently fail | Wake Lock + documented fallback |
 
 ---
@@ -93,7 +95,8 @@ Full detail: [docs/02-hosting.md](docs/02-hosting.md).
 **Tailscale only, until you decide otherwise on purpose.**
 
 A home-screen web app has no login. Anyone holding your unlocked phone is already inside it. That is
-fine on a private tailnet and it is not fine on the open internet.
+fine on a private tailnet and it is not fine on the open internet. The app itself never listens
+beyond `127.0.0.1`; only `tailscale serve` exposes it, and only to the tailnet.
 
 `tailscale funnel` will put a service on the public internet with a real certificate in one command.
 It is genuinely useful. It is also the exact moment your personal tool becomes an internet-facing
@@ -107,7 +110,7 @@ See [docs/04-https-and-tailscale.md](docs/04-https-and-tailscale.md).
 ## Layout
 
 ```
-template/     the skeleton: index.html, manifest, service worker, CSS, JS
+template/     the skeleton: index.html, manifest, service worker, CSS, JS, server.py
 bin/nixweb    new / serve / install / icons / check
 docs/         why, hosting, iPhone gotchas, HTTPS, offline
 examples/     worked examples

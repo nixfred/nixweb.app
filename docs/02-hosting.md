@@ -31,9 +31,10 @@ it does not restart, it does not log anywhere useful, and it dies with the termi
 
 ## Static versus dynamic
 
-The template is static files, so `python3 -m http.server` is genuinely enough. The moment the app
-needs to read a database or shell out, it needs a small backend: a single-file Python or Bun server
-next to the static files, serving `/api/*`.
+The template is static files plus `server.py`, a ~70-line standard-library server that serves them,
+answers `/ping`, and refuses dotfiles. The moment the app needs to read a database or shell out, it
+needs a small backend: grow `server.py` (or add a single-file Bun server beside it) to serve `/api/*`.
+`server.py` hides itself from the web, so extending it never publishes it by accident.
 
 Keep the API surface tiny and read-only wherever you can. Every write endpoint is a thing a phone in
 someone else's hand can do.

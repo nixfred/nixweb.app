@@ -1,42 +1,54 @@
 # HTTPS, Tailscale, and the line you should not cross by accident
 
-## Why plain HTTP is fine here
+## Why nixweb serves HTTPS even inside the tailnet
 
-Inside a tailnet, every connection is already end-to-end encrypted by WireGuard. Putting TLS inside
-that gets you a second encryption layer, a certificate to manage, and no additional protection
-against anyone who is not already on your tailnet.
+Not for encryption. WireGuard already encrypts every packet between your phone and the host, so a TLS
+layer adds no protection against anyone who is not already on your tailnet.
 
-**On the open internet it is the opposite**: plain HTTP means anyone between the phone and the host
-reads everything, including whatever token your app is using. There is no middle position.
+The reason is the **secure context**. Browsers hide a set of APIs from any page that was not loaded
+over HTTPS (or from `localhost`), and `http://gus.tail0940f.ts.net` is neither:
 
-So the rule is simple: **HTTP on the tailnet, HTTPS everywhere else, and never confuse which one you
-are on.** If you cannot say out loud which it is, stop.
+| Needs a secure context | Over plain http:// |
+|---|---|
+| Service worker (the offline shell) | `navigator.serviceWorker` is undefined. Nothing registers and nothing complains. |
+| Wake Lock (keeps the screen on while recording) | refused |
+| Microphone capture (`getUserMedia`) | refused |
+| Web push | unavailable |
 
-## Binding
+So on plain HTTP the app looks fine and quietly loses its offline cache, and any voice-first idea
+(see Idea Box in [IDEAS.md](../IDEAS.md)) cannot work at all.
 
-```bash
-python3 -m http.server 8731 --bind 0.0.0.0     # every interface, including untrusted wifi
-python3 -m http.server 8731 --bind 100.75.37.107  # the tailnet address only
+## How it is wired
+
+```
+phone ──HTTPS──> tailscaled  gus.tail0940f.ts.net:8731 ──HTTP──> 127.0.0.1:8731  server.py
 ```
 
-`0.0.0.0` is fine on a desktop behind a router. **On a laptop that sits on coffee-shop wifi, bind the
-tailnet address only** — otherwise everyone on that network can reach your tool. `nixweb serve` uses
-`0.0.0.0` for convenience; change it for anything you carry.
+- `server.py` listens on **127.0.0.1 only**. The port does not exist on the LAN or on coffee-shop
+  wifi, so nobody there can reach your tool. Only tailscaled can, and it only answers the tailnet.
+- `nixweb serve` runs `tailscale serve --bg --https=PORT http://127.0.0.1:PORT`, and takes the
+  mapping down again on Ctrl-C. `nixweb install` ties the mapping to the systemd unit, so
+  `systemctl --user disable --now nixweb-NAME` removes it too.
+- The app port and the HTTPS port are the same number.
 
 `127.0.0.1` cannot be reached by your phone. Localhost means *this machine*, and your phone is not
-this machine. This is the most common "why can't I see it" and it is worth teaching rather than
-just fixing.
+this machine. That is fine here: the phone talks to tailscaled, and tailscaled talks to localhost.
+It is also the most common "why can't I see it" when someone skips `tailscale serve`.
 
-## Real certificates on the tailnet
+**Ports are shared.** `tailscale serve --https=PORT <target>` *replaces* whatever already answers on
+that port, and a host often has several services doing exactly this. `nixweb` reads
+`tailscale serve status --json` first and refuses a port that is already mapped to something else.
+Look yourself with `tailscale serve status`.
 
-If you want HTTPS without exposing anything:
+## Certificates
 
-```bash
-tailscale cert gus.tail0940f.ts.net     # real cert, valid name, never leaves the tailnet
-```
+tailscaled gets a real Let's Encrypt certificate for `<host>.tail0940f.ts.net` on the first request
+(a few seconds), renews it, and the browser trusts it with no warning. HTTPS has to be enabled for the
+tailnet in the admin console first; `tailscale cert <host>` fails with a link if it is not.
 
-Then terminate TLS with Caddy or your own server. Worth doing when a browser API you need is
-secure-context-only.
+**The hostname becomes public.** Certificates are written to public Certificate Transparency logs, so
+`gus.tail0940f.ts.net` can be found by anyone who searches for it. The app behind it cannot be reached
+from outside the tailnet, but the *name* is not secret. Do not put anything sensitive in a hostname.
 
 ## The line
 
@@ -53,3 +65,9 @@ storage for your data and other people's, and a reason. Daniel's public tunnel w
 the live example: his personal data and the testers' data must not share a database.
 
 Treat `funnel` the way you treat `rm -rf`. Not forbidden, just never casual.
+
+## What `server.py` refuses to serve
+
+Every app is its own git repo, so the directory being served contains `.git` (the whole history) and
+probably a `.env`. `server.py` answers 404 for any path with a segment starting with `.`, and for
+itself. It is a floor, not a login: anything else in the folder is readable by anyone on the tailnet.

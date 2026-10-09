@@ -15,7 +15,12 @@ home, showing the last thing I knew" makes them think the network is down, which
   network paints your app instantly.
 - `/api/*` is **network-first with a cache fallback**: fresh data when home is reachable, the last
   known answer when it is not.
-- `/ping` is **never cached**, because a cached 200 would tell you a dead host is alive.
+- `/ping` is **never cached**, because a cached 200 would tell you a dead host is alive. It is
+  answered by `server.py`; a bare `python3 -m http.server` returns 404 for it, and the app would
+  then show "can't reach home" on its very first run.
+- **None of this runs over plain `http://`.** Browsers only register a service worker in a secure
+  context, and `http://gus.tail0940f.ts.net` is not one (only `localhost` is). That is why
+  `nixweb serve` puts HTTPS in front: see [04](04-https-and-tailscale.md).
 
 ## Do not trust `navigator.onLine`
 

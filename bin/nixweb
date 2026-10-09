@@ -21,12 +21,49 @@ ts_name(){
   hostname
 }
 
+# How an app reaches the phone: server.py listens on 127.0.0.1 only, and `tailscale serve`
+# terminates HTTPS on the tailnet name and proxies in. Two things follow from that:
+#   - the phone gets a SECURE CONTEXT. Service workers, Wake Lock, microphone capture and
+#     push are all refused on plain http:// to a non-localhost name.
+#   - nothing on the laptop's wifi can reach the port, because it is not bound there.
+# The tailscale HTTPS port is the same number as the app port.
+need_ts(){ command -v tailscale >/dev/null 2>&1 || die "tailscale not found: the phone reaches the app through it"; }
+need_port(){ [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ] || die "not a port: $1"; }
+need_server(){ [ -f "$1/server.py" ] || die "$1/server.py missing (apps made before it existed): cp $ROOT/template/server.py $1/"; }
+
+# Exit 0 if tailscale serve already maps https port $1 to something that is NOT this app.
+# `tailscale serve --https=PORT <target>` REPLACES whatever is on that port, and gus already
+# runs other services this way (443, 8443, 8773, 8788), so refuse rather than clobber.
+ts_port_taken(){
+  tailscale serve status --json 2>/dev/null | python3 -c '
+import json, sys
+port = sys.argv[1]; ours = "http://127.0.0.1:" + port
+d = json.load(sys.stdin) or {}
+webs = [d.get("Web") or {}] + [(f or {}).get("Web") or {} for f in (d.get("Foreground") or {}).values()]
+for web in webs:
+    for key, v in web.items():
+        if key.rsplit(":", 1)[-1] != port:
+            continue
+        if any(h.get("Proxy") != ours for h in (v.get("Handlers") or {}).values()):
+            sys.exit(0)
+sys.exit(1)' "$1"
+}
+
+ts_expose(){
+  need_ts; need_port "$1"
+  ts_port_taken "$1" && die "tailscale serve already uses https port $1 for something else (see: tailscale serve status). Pick another port."
+  local out
+  out="$(tailscale serve --bg --https="$1" "http://127.0.0.1:$1" 2>&1)" || die "tailscale serve failed:
+$out"
+}
+ts_unexpose(){ tailscale serve --https="$1" off >/dev/null 2>&1 || true; }
+
 usage(){ cat <<EOF
 ${BOLD}nixweb${RS} — your own tools, on your phone, over Tailscale.
 
   ${CY}nixweb new${RS} <name>              copy the template into \$NIXWEB_APPS/<name>
   ${CY}nixweb icons${RS} <name> [emoji]    generate every icon size the manifest asks for
-  ${CY}nixweb serve${RS} <name> [port]     serve it on the tailnet and print the phone URL
+  ${CY}nixweb serve${RS} <name> [port]     serve it on the tailnet over HTTPS and print the phone URL
   ${CY}nixweb install${RS} <name> [port]   write + enable a systemd --user unit so it survives reboot
   ${CY}nixweb check${RS} <name>            audit the app for the known iPhone traps
   ${CY}nixweb hosts${RS}                   show where you could serve this
@@ -81,29 +118,40 @@ cmd_icons(){
 cmd_serve(){
   local name="${1:?nixweb serve <name> [port]}"; local port="${2:-8731}"
   local dir="$APPS/$name"; [ -d "$dir" ] || die "no such app: $dir"
+  need_port "$port"; need_server "$dir"
+  ts_expose "$port"
+  # Not `exec`: bash has to stay alive so this trap can take the tailnet mapping down again.
+  # $port is expanded NOW (double quotes); a local would be gone by the time the trap fires.
+  trap "ts_unexpose $port" EXIT
   local host; host="$(ts_name)"
-  printf "\n  ${BOLD}Open this in SAFARI on your phone:${RS}\n\n    ${CY}http://%s:%s${RS}\n\n" "$host" "$port"
+  printf "\n  ${BOLD}Open this in SAFARI on your phone:${RS}\n\n    ${CY}https://%s:%s${RS}\n\n" "$host" "$port"
   note "Then: Share → Add to Home Screen. Chrome/Firefox on iOS cannot install it."
-  note "Serving $dir — Ctrl-C to stop."
+  note "Tailnet only. Python listens on 127.0.0.1; tailscale serve fronts it with HTTPS."
+  note "Serving $dir. Ctrl-C stops it and removes the tailnet mapping."
   echo
-  # Bind 0.0.0.0 so the tailnet interface is included. On a laptop that also sits on
-  # untrusted wifi, prefer binding the tailnet IP only: see docs/04.
-  cd "$dir" && exec python3 -m http.server "$port" --bind 0.0.0.0
+  cd "$dir" && python3 server.py "$port"
 }
 
 cmd_install(){
   local name="${1:?nixweb install <name> [port]}"; local port="${2:-8731}"
   local dir="$APPS/$name"; [ -d "$dir" ] || die "no such app: $dir"
-  local unit="$HOME/.config/systemd/user/nixweb-$name.service"
+  need_port "$port"; need_server "$dir"; need_ts
+  ts_port_taken "$port" && die "tailscale serve already uses https port $port for something else (see: tailscale serve status). Pick another port."
+  local unit="$HOME/.config/systemd/user/nixweb-$name.service" ts; ts="$(command -v tailscale)"
   mkdir -p "$(dirname "$unit")"
+  # The tailnet mapping lives and dies with the unit: ExecStartPost adds it, ExecStopPost
+  # removes it (the leading "-" keeps a teardown hiccup from marking the unit failed).
+  # If tailscaled is not up yet at boot, ExecStartPost fails, the unit fails, and
+  # Restart=on-failure tries again in 3s until it is. Loud and self-healing.
   cat > "$unit" <<UNIT
 [Unit]
 Description=nixweb: $name
-After=network-online.target
 
 [Service]
 WorkingDirectory=$dir
-ExecStart=/usr/bin/python3 -m http.server $port --bind 0.0.0.0
+ExecStart=/usr/bin/python3 $dir/server.py $port
+ExecStartPost=$ts serve --bg --https=$port http://127.0.0.1:$port
+ExecStopPost=-$ts serve --https=$port off
 Restart=on-failure
 RestartSec=3
 
@@ -113,8 +161,10 @@ UNIT
   systemctl --user daemon-reload
   systemctl --user enable --now "nixweb-$name.service"
   ok "nixweb-$name.service enabled and started on port $port"
+  note "phone URL: https://$(ts_name):$port"
   note "logs: journalctl --user -u nixweb-$name -f"
   note "survive logout: loginctl enable-linger $USER"
+  note "remove: systemctl --user disable --now nixweb-$name  (also drops the tailnet mapping)"
 }
 
 cmd_check(){
@@ -131,6 +181,8 @@ cmd_check(){
   chk 'safe-area-inset'               "$css" "safe-area insets used (clears notch + home indicator)"
   chk 'overscroll-behavior'           "$css" "overscroll-behavior (no whole-page rubber band)"
   chk 'touch-action'                  "$css" "touch-action: manipulation (no 300ms tap delay)"
+  chk '"/ping"'                       "$dir/server.py" "server.py answers /ping (without it the offline banner is always on)"
+  chk '127.0.0.1'                     "$dir/server.py" "server.py binds loopback by default (tailscale serve fronts it with HTTPS)"
   [ -f "$dir/sw.js" ] && ok "service worker present (offline shows your app, not a browser error)" \
     || { printf "${AM}⚠${RS} no service worker\n"; fails=$((fails+1)); }
   [ -f "$dir/icons/icon-180.png" ] && ok "icons generated" \

@@ -16,7 +16,10 @@ Xcode for a year for no reason.
    The moment it needs a bundler it stops being something a client can copy and understand in an
    afternoon, which is the whole point.
 2. **Tailscale only by default.** Nothing here binds to a public interface without an explicit,
-   per-app decision. `tailscale funnel` is a decision, never a convenience.
+   per-app decision. `tailscale funnel` is a decision, never a convenience. Apps listen on
+   127.0.0.1 and `tailscale serve` fronts them with HTTPS (a secure context is what lets the
+   service worker, Wake Lock and the mic work). Never bind 0.0.0.0. `tailscale serve --https=PORT`
+   replaces whatever is on that port, so `nixweb` checks `tailscale serve status` first; keep it so.
 3. **Every CSS rule that exists for an iOS quirk carries a `WHY` comment.** Someone will delete it
    otherwise, and then wonder six months later why dragging highlights text.
 4. **Verify what you generate.** `nixweb icons` counts the colours in the PNG it just wrote and
@@ -29,7 +32,7 @@ Xcode for a year for no reason.
 ## Layout
 
 ```
-template/     the skeleton (index.html, app.css, app.js, sw.js, manifest)
+template/     the skeleton (index.html, app.css, app.js, sw.js, manifest, server.py)
 bin/nixweb    new | icons | serve | install | check | hosts
 docs/         why, hosting, iPhone gotchas, HTTPS/Tailscale, offline
 IDEAS.md      ten apps worth building, all front ends onto existing projects
