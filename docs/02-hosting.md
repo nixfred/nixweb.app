@@ -18,6 +18,14 @@ database is slower, more fragile and harder to debug than one sitting next to it
 you and your own tool. Not before. A VPS adds a machine to patch, a bill, and a second place for
 secrets to live.
 
+## Choose the host and port once
+
+An installed app is bound to its origin: scheme, host and port. Rename the machine or change the
+HTTPS port and every installed icon becomes a different app, with different storage and no way to
+update the old one. Pick the final host and port before anyone installs, and write the origin and
+the manifest `id` in the app's README (NW-NET-005). Moving to a VPS later means installing again on
+every phone.
+
 ## Making it survive a reboot
 
 ```bash
@@ -27,14 +35,42 @@ journalctl --user -u nixweb-mytool -f
 ```
 
 A user unit, not a system unit, because the app runs as you and reads your files. Never `nohup &`:
-it does not restart, it does not log anywhere useful, and it dies with the terminal.
+it does not restart, it does not log anywhere useful, and it dies with the terminal. The tailnet
+mapping lives and dies with the unit (NW-NET-004).
+
+## What server.py does
+
+`template/server.py` is standard-library Python and serves one folder, `public/`, and nothing
+outside it. A `.git`, a `.env`, your notes and the server source cannot be published by a missed
+denylist entry (NW-SRV-005). It also:
+
+- binds `127.0.0.1` and refuses any other address (NW-NET-001);
+- answers `/ping` and `/health`, never cached (NW-SRV-002);
+- sends a strict Content-Security-Policy and the companion headers on every response, even a 404
+  (NW-SEC-001, NW-SEC-002);
+- answers only its own host names, which ends DNS rebinding (NW-SEC-003);
+- refuses cross-site writes (NW-SEC-004) and oversize bodies (NW-SRV-011);
+- makes every un-hashed file revalidate, and speaks 304, gzip and Range (NW-SRV-006, -008, -009);
+- exits cleanly on SIGTERM, so systemd stops it without cutting a request in half (NW-SRV-010).
+
+Why each one matters is in [07-security-model.md](07-security-model.md).
 
 ## Static versus dynamic
 
-The template is static files plus `server.py`, a ~70-line standard-library server that serves them,
-answers `/ping`, and refuses dotfiles. The moment the app needs to read a database or shell out, it
-needs a small backend: grow `server.py` (or add a single-file Bun server beside it) to serve `/api/*`.
-`server.py` hides itself from the web, so extending it never publishes it by accident.
+When the app needs data, add routes to `server.py` instead of a second server:
+
+```python
+@route("GET", "/api/notes")
+def list_notes(_):
+    return 200, {"notes": read_notes()}
+```
+
+A handler gets the parsed JSON body (or `None`) and returns `(status, object)`. Writes reach it only
+after the Host, cross-site, size and content-type guards, and a repeated `Idempotency-Key` replays
+the stored answer, which is what makes an offline retry safe (NW-DAT-002).
 
 Keep the API surface tiny and read-only wherever you can. Every write endpoint is a thing a phone in
-someone else's hand can do.
+someone else's hand can do, and every write confirms on screen first (NW-UIX-001).
+
+A server in another language is fine. Keep `public/`, put the same guards in front, and check it
+while it runs with `nixweb check APP --target http://127.0.0.1:PORT`.

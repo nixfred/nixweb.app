@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- WHY: viewport-fit=cover lets the page reach under the notch and is what makes the
+     env(safe-area-inset-*) values non-zero. Without it the layout looks right in a simulator
+     and clips on the phone. There is NO user-scalable=no and NO maximum-scale: WebKit has
+     ignored them since iOS 10 and they fail WCAG 1.4.4 everywhere else. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NIXWEB</title>
+<meta name="description" content="A nixweb.app home-screen web app.">
+<meta name="color-scheme" content="dark">
+<!-- WHY: Safari turns anything shaped like a phone number into a call link. -->
+<meta name="format-detection" content="telephone=no">
+
+<!-- Install signals. iOS 26 opens every Home Screen site as a web app unless the user turns
+     that off, and older iOS needs these, so keep every one of them. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- WHY black and not black-translucent: WebKit bug 301994 reports env(safe-area-inset-top)
+     returning 0 under black-translucent on iOS 26.1 and later, which puts the header under the
+     clock. Change it only after testing on the iOS you ship to. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="NIXWEB">
+<meta name="theme-color" content="#0b1018">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<noscript>
+  <p class="fatal-static">This app needs JavaScript. Turn it on in Settings, then reload.</p>
+</noscript>
+
+<div class="app">
+  <header class="bar">
+    <span class="dot" id="net" aria-hidden="true"></span>
+    <h1>NIXWEB</h1>
+    <span class="state" id="netlabel">checking</span>
+    <button class="ghost" id="refresh" type="button" aria-label="Reload the app">&#8635;</button>
+  </header>
+
+  <!-- Three live regions. They are always in the page and EMPTY until app.js writes into them,
+       because a live region that arrives together with its text is often not announced.
+       The CSS hides an empty one. -->
+  <div class="banner" id="offline" role="status"></div>
+  <div class="banner update" id="update" role="status"></div>
+  <div class="fatal" id="fatal" role="alert"></div>
+
+  <!-- The ONLY scrolling element. The page itself never scrolls (see app.css). -->
+  <main class="scroll" id="main">
+    <section class="card" aria-labelledby="h-works">
+      <h2 id="h-works">It works</h2>
+      <p>This is the nixweb template. Replace this card with your tool.</p>
+      <p class="dim" id="served"></p>
+      <p class="dim">Version <span id="version">unknown</span></p>
+    </section>
+
+    <section class="card" aria-labelledby="h-install">
+      <h2 id="h-install">Install me</h2>
+      <p>In <b>Safari</b> on iOS: Share, then <b>Add to Home Screen</b>, and leave <b>Open as Web App</b>
+         switched on. Other iOS browsers can add it too from iOS 16.4, but test in Safari first.
+         On Android, Chrome offers Install.</p>
+      <p class="dim" id="mode"></p>
+    </section>
+
+    <section class="card" aria-labelledby="h-handled">
+      <h2 id="h-handled">Already handled</h2>
+      <ul>
+        <li>Dragging a bar or a button does not select text; your content still selects</li>
+        <li>Content clears the notch and the home indicator</li>
+        <li>The page does not bounce; this list scrolls instead</li>
+        <li>Offline shows this app with a banner, not a browser error</li>
+        <li>An update asks before it reloads</li>
+        <li>An error shows a card, never a white screen</li>
+      </ul>
+    </section>
+
+    <section class="card" aria-labelledby="h-standard">
+      <h2 id="h-standard">Built to a standard</h2>
+      <p>Run <b>nixweb check</b> on this folder. It tests this app against the NixWeb Standard and
+         says which rules fail and why.</p>
+    </section>
+  </main>
+
+  <nav class="tabs" aria-label="Sections">
+    <button class="tab on" type="button" data-view="home" aria-current="page">Home</button>
+    <button class="tab" type="button" data-view="two">Two</button>
+    <button class="tab" type="button" data-view="three">Three</button>
+  </nav>
+</div>
+</body>
+</html>

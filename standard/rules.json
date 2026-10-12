@@ -1,0 +1,1630 @@
+{
+ "standard": "NixWeb",
+ "title": "The NixWeb Standard for Home-Screen Web Apps",
+ "edition": "1.0.0",
+ "date": "2026-10-11",
+ "levels": {
+  "1": {
+   "name": "Installable",
+   "blurb": "It installs, it is not dangerous on the tailnet, and nothing basic is broken. Almost every rule is checked by the checker in seconds."
+  },
+  "2": {
+   "name": "Dependable",
+   "blurb": "It keeps working when things go wrong: host asleep, network gone, update mid-session, hostile page in the browser. Needs a running server and a few device checks."
+  },
+  "3": {
+   "name": "Exemplary",
+   "blurb": "It is proven. A person has run it on a real phone with assistive technology, the numbers are recorded, and a claim is published."
+  }
+ },
+ "categories": {
+  "ARC": "Architecture",
+  "NET": "Network and hosting",
+  "SRV": "Server",
+  "SEC": "Security and privacy",
+  "INS": "Installability",
+  "SHL": "Shell and layout",
+  "IOS": "iOS platform behaviour",
+  "OFF": "Offline and resilience",
+  "DAT": "Data and storage",
+  "UIX": "Interface behaviour",
+  "ACC": "Accessibility",
+  "PER": "Performance",
+  "DOC": "Documentation and evidence",
+  "DEV": "Device verification"
+ },
+ "principles": [
+  "It is a web page, not a store app. Nobody reviews it, so you own its correctness.",
+  "Loopback plus HTTPS. The app speaks plain HTTP to 127.0.0.1 and tailscale serve supplies HTTPS and the network boundary.",
+  "No build step. HTML, CSS and one JavaScript file that a client can read in an afternoon.",
+  "The page never scrolls; lists do.",
+  "Reads are free, writes confirm.",
+  "Fail honestly. Offline, unreachable and broken each say what is true.",
+  "The tailnet is the lock, not the only lock. There is no login, but the browser on the phone is still a way in.",
+  "Verify what you generate. A check that cannot fail is not a check.",
+  "Explain every quirk. A rule that exists for an iOS bug carries a WHY comment."
+ ],
+ "rules": [
+  {
+   "id": "NW-ARC-001",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "arc_no_build",
+   "title": "No build step, no framework, no package manager",
+   "statement": "The app MUST run as written. It MUST NOT need a bundler, transpiler, framework runtime or package manager to build or serve it, and its folder MUST NOT contain node_modules, a package.json that lists dependencies, a lockfile or a bundler config.",
+   "why": "An app that needs npm install is no longer something a client can read and change in an afternoon. This is the defining constraint of the standard. Vendored files are allowed because they are visible (NW-ARC-003).",
+   "test": "Static: no node_modules folder; no package.json with dependencies or devDependencies; none of package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lock, bun.lockb, tsconfig.json, or a vite, webpack, rollup, parcel, esbuild, babel, postcss or tailwind config.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ARC-002",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "arc_public_dir",
+   "title": "One public folder, one server file beside it",
+   "statement": "The app MUST keep every file it publishes inside a public/ directory that contains index.html, and MUST have a server entry file (server.py, server.ts, server.js or server.mjs) beside public/, never inside it.",
+   "why": "Serving a directory that holds only what you mean to publish makes it impossible to leak .git, .env, notes or the server source through a missed denylist entry.",
+   "test": "Static: public/index.html exists; one server.* file exists in the app root; no server.* file exists inside public/.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ARC-003",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "arc_vendor_record",
+   "title": "Vendored third-party code is recorded",
+   "statement": "If the app vendors third-party code (anything under public/vendor/ or public/lib/, or any *.min.js file), a VENDOR.md MUST list each file with its name, version, source URL and SHA-256.",
+   "why": "With no npm there is no lockfile to rot, so supply-chain risk concentrates in the few files you copied in. Pin and date them. The rule does not apply to an app that vendors nothing.",
+   "test": "Static: find vendored files; VENDOR.md exists and mentions each by file name. Compare sha256sum against the recorded hash.",
+   "refs": [
+    "https://owasp.org/www-project-application-security-verification-standard/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-NET-001",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "net_loopback_default",
+   "title": "The server binds loopback by default and refuses anything else",
+   "statement": "The server MUST listen on 127.0.0.1 (or ::1) by default and MUST refuse to start on any other address unless an explicit, named override is set.",
+   "why": "tailscale serve is the one thing meant to reach the port. Binding 0.0.0.0 also publishes the app to the LAN and to coffee-shop wifi, and a loopback bind is what makes the Tailscale identity headers trustworthy.",
+   "test": "Static (server.py): the default bind is 127.0.0.1 and no default of 0.0.0.0, an empty string or :: appears. NW-NET-002 proves the real socket.",
+   "refs": [
+    "https://tailscale.com/kb/1242/tailscale-serve",
+    "https://tailscale.com/kb/1312/serve"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-NET-002",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "net_listen_loopback_only",
+   "title": "The listening socket is loopback only",
+   "statement": "While it runs, the app's listening socket MUST be bound to 127.0.0.1 or ::1 and to no other address.",
+   "why": "A static read of the code can be wrong about what the process really did. The socket table is the truth.",
+   "test": "Runtime (Linux): the checker starts the server and reads /proc/net/tcp and /proc/net/tcp6. Elsewhere run ss -ltn or lsof -iTCP -sTCP:LISTEN by hand.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-NET-003",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "net_no_funnel",
+   "title": "Nothing in the app starts tailscale funnel",
+   "statement": "No script, unit file or server code in the app MAY run tailscale funnel. Publishing to the public internet is a separate, written decision.",
+   "why": "Funnel puts the service on the open internet with a real certificate. A port is either served privately or funnelled and the most recent command wins, so one funnel command on a serve port silently flips it public. A no-login app on funnel is an internet-facing service with no authentication.",
+   "test": "Static: no 'tailscale funnel' in *.sh, *.service, *.py, *.js, *.mjs, *.ts, Makefile. By hand: tailscale funnel status shows nothing for this app.",
+   "fix": "If you really need the public internet: an app-level login, a rate limit, separate storage for other people's data, and a written decision in CONFORMANCE.md, before the command runs.",
+   "refs": [
+    "https://tailscale.com/kb/1223/funnel"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-NET-004",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "runtime",
+   "check": "net_systemd_unit",
+   "title": "The service comes back after a reboot",
+   "statement": "A long-lived app SHOULD run as a systemd user unit (nixweb install) with Restart=on-failure and linger enabled, never from nohup or an open terminal.",
+   "why": "nohup does not restart, logs nowhere useful and dies with the terminal. The tailnet mapping should live and die with the unit.",
+   "test": "Runtime (host): systemctl --user is-enabled nixweb-NAME.service; loginctl show-user USER -p Linger.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-NET-005",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "process",
+   "title": "Host and port are final before anyone installs; machine names carry nothing sensitive",
+   "statement": "The app's tailnet hostname and HTTPS port SHOULD be chosen before it is installed on any phone and written in the README, and machine names SHOULD carry nothing sensitive.",
+   "why": "An installed app is bound to its origin (scheme, host, port). Renaming the machine or changing the port makes every installed icon a different app with different storage. Issuing an HTTPS certificate also writes the machine name to public Certificate Transparency logs, where anyone can search it.",
+   "test": "Process: the README states the origin and the manifest id; a crt.sh search for the hostname shows nothing you mind being public.",
+   "refs": [
+    "https://tailscale.com/kb/1153/enabling-https",
+    "https://developer.chrome.com/blog/pwa-manifest-id"
+   ],
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-NET-006",
+   "level": 3,
+   "keyword": "SHOULD",
+   "method": "process",
+   "title": "A grant narrows who can reach the app when the tailnet is shared",
+   "statement": "If the tailnet has any user or device besides the owner, a grant limiting who can reach the app's port SHOULD be in place.",
+   "why": "Tailscale policy is deny by default but a personal tailnet often allows everything, and a shared-in device gets everything the node's identity can serve. A no-login app has no second lock.",
+   "test": "Process: in the admin console, Access controls, test access from a device that must be denied; tailscale ping and curl from it time out.",
+   "refs": [
+    "https://tailscale.com/kb/1324/grants"
+   ],
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-NET-007",
+   "level": 3,
+   "keyword": "SHOULD",
+   "method": "runtime",
+   "check": "net_edge",
+   "title": "The tailnet HTTPS edge delivers what loopback does",
+   "statement": "Through its tailnet HTTPS URL the app SHOULD answer 200 with the same security headers it sends on loopback, and SHOULD still compress text.",
+   "why": "Verified 2026-10-11 on Tailscale 1.102.3: tailscale serve passes the original Host through, adds X-Forwarded-For, X-Forwarded-Host and X-Forwarded-Proto, replaces any client-supplied Tailscale-User-Login with the real one, and passes Content-Encoding and the app's headers through. It adds no HSTS of its own.",
+   "test": "Runtime: nixweb check APP --url https://HOST:PORT requests / and checks the status and the security headers. Without --url this rule reports as not verified.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-001",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "srv_hides_secrets",
+   "title": "Dotfiles, server source, repository and environment paths return 404",
+   "statement": "The server MUST answer 404 for /.git/config, /.env, /.gitignore, /server.py and any path with a segment that starts with a dot.",
+   "why": "Every app is its own git repository and often holds a .env. A served .git is the whole history.",
+   "test": "Runtime: curl each path and require 404.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-002",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "srv_ping",
+   "title": "/ping answers fast, is never cached, and answers HEAD",
+   "statement": "GET and HEAD /ping MUST return 200 quickly with Cache-Control: no-store.",
+   "why": "The app's reachability probe asks /ping. A bare static server 404s it, so a fresh app shows 'cannot reach home'. A cached 200 would report a dead host as alive.",
+   "test": "Runtime: GET and HEAD /ping return 200 and Cache-Control contains no-store.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-003",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "srv_traversal",
+   "title": "Path traversal fails, including encoded forms",
+   "statement": "Requests that try to climb out of the public directory MUST fail with a 4xx status: plain .., %2e%2e, double-encoded %252e%252e, an encoded slash, and a backslash.",
+   "why": "A server that decodes once and checks once is beaten by a path decoded twice or by a symlink. Resolve the real path, then require it stays inside the root.",
+   "test": "Runtime: curl --path-as-is with each form against a file known to exist one level up (server.py); require 4xx.",
+   "refs": [
+    "https://owasp.org/www-community/attacks/Path_Traversal"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-004",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "srv_mime",
+   "title": "Correct MIME types",
+   "statement": "The server MUST send application/manifest+json for the manifest, text/javascript for .js files including sw.js, text/css for .css and image/svg+xml for .svg, with charset=utf-8 on text types.",
+   "why": "A service worker or module script with the wrong type fails to register or load. RFC 9239 makes text/javascript the only recommended JavaScript type. An explicit table beats the OS mime database, which differs between Python versions.",
+   "test": "Runtime: curl -sI each file and compare Content-Type.",
+   "refs": [
+    "https://www.rfc-editor.org/rfc/rfc9239"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-005",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "srv_public_only",
+   "title": "The server publishes public/ and nothing else, and never lists a directory",
+   "statement": "The server MUST publish only files inside public/ whose extension is on an allowlist, MUST NOT serve any file outside public/, and MUST answer 404, not a listing, for a directory without an index.html.",
+   "why": "A denylist (no dotfiles, no server.py) is a floor. Every other file in the folder, such as notes.md, app.db, server.py.bak or CLAUDE.md, stays readable by the whole tailnet. A dedicated directory plus an allowlist fails closed. Python's stock handler also lists directories and follows symlinks.",
+   "test": "Runtime on a temporary copy: the checker plants zz-nixweb-canary.txt in the app root, plus zz-nixweb-canary.db, server.py.bak and an empty directory in public/, starts the server on the copy, and requires 404 for all of them.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-006",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "srv_cache_control",
+   "title": "Files without a content hash always revalidate",
+   "statement": "HTML, sw.js, the manifest and every file without a content hash in its name MUST be sent with Cache-Control: no-cache, no-store or max-age=0. Only content-hashed file names MAY be sent as immutable.",
+   "why": "With only Last-Modified and no Cache-Control a browser applies heuristic freshness, and cache.addAll() reads through the HTTP cache. A new service worker can then precache the old app.js and the update ships nothing. This was observed in the template before it was fixed.",
+   "test": "Runtime: curl -sI / /sw.js /manifest.webmanifest /app.js and read Cache-Control.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-007",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "srv_no_leaks",
+   "title": "Errors and headers leak nothing",
+   "statement": "No response header or error body MAY contain a language or library version, a file-system path or a stack trace, and a 404 body MUST be generic.",
+   "why": "Python's http.server announces 'SimpleHTTP/0.6 Python/3.x' in the Server header and echoes messages in its error pages. Detail belongs in the server log.",
+   "test": "Runtime: the Server header and a 404 body contain no 'Python', no path separator of the app folder, and no 'Traceback'.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-008",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "runtime",
+   "check": "srv_delivery",
+   "title": "Conditional requests and compression",
+   "statement": "The server SHOULD send ETag or Last-Modified and answer a matching conditional GET with 304, and SHOULD gzip text responses when the client accepts it, with Vary: Accept-Encoding.",
+   "why": "With no-cache on everything (NW-SRV-006), 304 makes revalidation nearly free. Compression cuts the bytes a phone pulls through the tunnel. It was not documented whether tailscale serve compresses on its own, so the app does it.",
+   "test": "Runtime: a repeat GET with If-None-Match returns 304; a GET with Accept-Encoding: gzip on a text file returns Content-Encoding: gzip.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-009",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "runtime",
+   "check": "srv_range",
+   "title": "Byte ranges",
+   "statement": "The server SHOULD honour a single Range request with 206 and Content-Range, and answer an unsatisfiable range with 416.",
+   "why": "Safari fetches audio and video with Range requests, and a server that answers 200 with the whole file is widely reported to stall or fail. Python's stock http.server ignores Range.",
+   "test": "Runtime: Range: bytes=0-9 on a file returns 206 with Content-Range; a range past the end returns 416.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-010",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "runtime",
+   "check": "srv_sigterm",
+   "title": "Clean exit on SIGTERM",
+   "statement": "The server SHOULD finish in-flight requests and exit with status 0 on SIGTERM.",
+   "why": "systemd stops a service with SIGTERM. Python's default kills the process mid-request, and a Ctrl-C handler alone does not cover it.",
+   "test": "Runtime: the checker sends SIGTERM to a server it started and requires exit status 0 within 3 seconds.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SRV-011",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "srv_body_cap",
+   "title": "Request size and time are bounded",
+   "statement": "The server MUST refuse a request body over a fixed limit (64 KiB for JSON) with 413 before reading it, and MUST set a socket timeout so one stuck client cannot hold a thread.",
+   "why": "ThreadingHTTPServer starts a thread per connection with no limits. A page open on a compromised device can flood a no-login endpoint.",
+   "test": "Runtime: a POST that declares Content-Length 99999999 gets 413 within 5 seconds.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SEC-001",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "sec_csp",
+   "title": "A strict Content-Security-Policy is sent as a header",
+   "statement": "Every response MUST carry a Content-Security-Policy header that sets default-src 'self', does not allow 'unsafe-inline' or 'unsafe-eval' for scripts, and sets object-src 'none', base-uri and frame-ancestors.",
+   "why": "With no inline script and no other origin, a 'self'-only policy needs no nonces. frame-ancestors, sandbox and reporting do not work in a meta tag, so a meta CSP is not enough.",
+   "test": "Runtime: curl -sI and parse the policy. Optional: paste it into csp-evaluator.withgoogle.com.",
+   "refs": [
+    "https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SEC-002",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "sec_headers",
+   "title": "Companion security headers on every response",
+   "statement": "Every response, including 404s and /ping, MUST carry X-Content-Type-Options: nosniff, Referrer-Policy: no-referrer (or same-origin), and a Permissions-Policy that denies the features the app does not use.",
+   "why": "This is the OWASP Secure Headers baseline. An app that records audio must allow microphone=(self), so the default must match what the app uses. Cross-Origin-Opener-Policy: same-origin is also sent. Cross-Origin-Resource-Policy is deliberately left out of the template: it could stop the OS fetching the home-screen icon, and that is not verified on a device.",
+   "test": "Runtime: curl -sI on /, /ping and a missing path; each carries all three.",
+   "refs": [
+    "https://raw.githubusercontent.com/OWASP/www-project-secure-headers/master/ci/headers_add.json",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SEC-003",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "sec_host_allowlist",
+   "title": "Host header allowlist, against DNS rebinding",
+   "statement": "The server MUST answer 421 or 403 to a request whose Host is not one of its own names: localhost, 127.0.0.1, ::1, the machine's tailnet name and its tailnet addresses.",
+   "why": "A page on a hostile site can point its own DNS name at 127.0.0.1 and then talk to a loopback server using that name. Refusing unknown Host values ends the attack. Verified 2026-10-11 on Tailscale 1.102.3: tailscale serve passes the original Host through, so an exact allowlist works. This is the mitigation the MCP SDKs use for localhost servers. No OWASP primary page was found for it.",
+   "test": "Runtime: curl -H 'Host: evil.example' returns 421 or 403; Host: 127.0.0.1:PORT returns 200.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SEC-004",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "sec_csrf",
+   "title": "State-changing requests refuse cross-site origins",
+   "statement": "POST, PUT, PATCH and DELETE MUST be refused with 403 when Sec-Fetch-Site is cross-site or same-site, or when Origin is present and does not match Host, including Origin: null. GET and HEAD MUST NOT change state. JSON endpoints SHOULD also require Content-Type: application/json.",
+   "why": "No login means no cookie to be missing: any page open in a browser on a tailnet device can send a request to your tailnet URL. OWASP names Fetch Metadata the primary defence. A request with neither header comes from curl or a script, not a browser page, and is allowed. Sec-Fetch-Site is sent by current browsers including Safari.",
+   "test": "Runtime: a POST with Sec-Fetch-Site: cross-site, one with Origin: https://evil.example and one with Origin: null each get 403; a POST with a matching Origin is not refused by the guard.",
+   "refs": [
+    "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Site"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SEC-005",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "runtime",
+   "check": "sec_no_cors",
+   "title": "No CORS",
+   "statement": "The server MUST NOT send Access-Control-Allow-* headers, MUST NOT reflect Origin, and MUST answer OPTIONS with 405.",
+   "why": "Same-origin policy already blocks cross-origin reads. CORS only loosens it. CORS never protected writes: a simple cross-origin POST still executes (see NW-SEC-004).",
+   "test": "Runtime: OPTIONS with Origin: https://evil.example returns 405 and no Access-Control-Allow-Origin on any response.",
+   "refs": [
+    "https://web.dev/articles/cross-origin-resource-sharing"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SEC-006",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "sec_no_third_party",
+   "title": "No third-party origins, no trackers",
+   "statement": "The app MUST NOT load or contact any other origin (scripts, styles, fonts, images, analytics, telemetry, CDN assets, crash reporters), and MUST NOT include an analytics or tracking SDK.",
+   "why": "Every foreign origin leaks the user's address and referrer to a vendor, breaks offline use and defeats a 'self'-only CSP. The point of a tailnet app is that the data stays on the user's machines.",
+   "test": "Static: every absolute URL in HTML, CSS, JS, the manifest and sw.js is same-origin (comments excluded; the SVG namespace is allowed), and none of gtag, googletagmanager, google-analytics, plausible, mixpanel, segment, sentry, hotjar, posthog or sendBeacon appears.",
+   "fix": "Vendor the file into public/vendor/ and record it in VENDOR.md (NW-ARC-003).",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SEC-007",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "sec_no_sinks",
+   "title": "No code-injection sinks",
+   "statement": "The app MUST NOT use eval, new Function, document.write, string-argument setTimeout or setInterval, innerHTML, outerHTML or insertAdjacentHTML. Untrusted data MUST be inserted with textContent, createElement and setAttribute on non-executable attributes.",
+   "why": "OWASP's DOM XSS cheat sheet names textContent the safe sink. Data from your own notes is still untrusted: it can be pasted or synced from somewhere else.",
+   "test": "Static: scan the JavaScript for the sinks. A justified exception carries a waiver comment on the same or the previous line: nixweb-allow: NW-SEC-007 followed by the reason.",
+   "refs": [
+    "https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SEC-008",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "sec_no_inline",
+   "title": "No inline script, handlers or styles",
+   "statement": "index.html MUST NOT contain inline script bodies, on* event-handler attributes, inline style elements or style attributes, so the CSP can forbid them.",
+   "why": "Without this a strict CSP breaks the app, and the first fix people reach for is 'unsafe-inline'.",
+   "test": "Static: parse index.html; no script element without src, no on* attribute, no style element, no style attribute.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SEC-009",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "sec_no_secrets",
+   "title": "No secrets in served files",
+   "statement": "Files in public/ MUST NOT contain API keys, tokens, passwords or private keys, and a .env file MUST NOT be tracked by git.",
+   "why": "Everything served is readable by every tailnet member and is cached on every device that opens the app.",
+   "test": "Static: scan public/ for private-key blocks, token shapes (sk-, ghp_, AKIA, xoxb-) and key, secret or password assignments to long string literals; git ls-files shows no .env.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-INS-001",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ins_manifest_linked",
+   "title": "A valid manifest is linked",
+   "statement": "index.html MUST link a manifest with link rel=manifest, and the file MUST exist inside public/ and parse as JSON.",
+   "why": "Chromium reads the manifest from the page that is open, and Safari fetches it at page load since 15.4, so a broken link shows up early.",
+   "test": "Static: the link exists, the file exists, json.loads succeeds. Chrome DevTools, Application, Manifest shows no errors.",
+   "refs": [
+    "https://www.w3.org/TR/appmanifest/",
+    "https://web.dev/articles/add-manifest"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-INS-002",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ins_manifest_members",
+   "title": "Required manifest members",
+   "statement": "The manifest MUST declare name, short_name, start_url, display set to standalone, and icons, and MUST NOT set prefer_related_applications to true.",
+   "why": "Chromium's installability criteria need a name, start_url, display and 192 and 512 icons. Safari honours standalone; fullscreen opens standalone and minimal-ui degrades to a browser shortcut, so standalone is the one value that means the same everywhere. display_override is Chromium only.",
+   "test": "Static: read the members from the manifest.",
+   "refs": [
+    "https://web.dev/articles/install-criteria",
+    "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-INS-003",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ins_manifest_id_scope",
+   "title": "A stable id, and a start_url inside scope",
+   "statement": "The manifest MUST set a stable id such as \"/\", start_url MUST sit inside scope, and scope MUST end with a slash. In-app navigation MUST stay inside it.",
+   "why": "Without an id, identity is derived from start_url and a later change makes a new app. WebKit documents id since 16.4. Scope matching is a same-origin string-prefix match, and a start_url outside the scope silently resets the scope to the default.",
+   "test": "Static: id is present; start_url and scope are relative or root-relative; scope ends with a slash. Chrome DevTools shows the computed App Id.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Manifest/Reference/id",
+    "https://developer.chrome.com/blog/pwa-manifest-id"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-INS-004",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ins_icons",
+   "title": "Complete, real, non-blank icons",
+   "statement": "The manifest MUST list PNG icons at 192x192 and 512x512 with purpose any and a separate 512x512 PNG with purpose maskable. Every listed file MUST exist at its declared size, and no icon MAY be a single flat colour.",
+   "why": "Chromium needs 192 and 512. web.dev advises separate files because a maskable icon needs a full-bleed opaque background and a safe zone, while an any icon should not. An invisible icon, where a font did not render, is exactly the failure nixweb icons guards against.",
+   "test": "Static: the checker reads every PNG header and decodes the pixels. Paste the maskable icon into maskable.app to see the safe zone.",
+   "refs": [
+    "https://web.dev/articles/maskable-icon",
+    "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/How_to/Define_app_icons"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-INS-005",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ins_apple_icon",
+   "title": "apple-touch-icon is declared, 180x180 and opaque",
+   "statement": "index.html MUST link rel=apple-touch-icon to a 180x180 PNG with no alpha channel.",
+   "why": "Apple's tag takes precedence over manifest icons, and iOS paints transparent pixels black. Without one, iOS 16.4 and later draws a monogram. The old story that iOS screenshots your page is outdated.",
+   "test": "Static: the link exists; the file is a 180x180 PNG whose colour type has no alpha and no tRNS chunk.",
+   "refs": [
+    "https://webkit.org/blog/12445/new-webkit-features-in-safari-15-4/",
+    "https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-INS-006",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ins_apple_meta",
+   "title": "The Apple and Chromium app meta tags",
+   "statement": "index.html MUST include apple-mobile-web-app-capable set to yes, apple-mobile-web-app-title, and mobile-web-app-capable set to yes.",
+   "why": "On iOS 16.4 to 18 a site without a standalone display or the capable tag was only a bookmark. iOS 26 opens every Home Screen site as a web app by default, but lets the user switch that off, so keep every signal. The tags cost nothing.",
+   "test": "Static: parse the head.",
+   "refs": [
+    "https://webkit.org/blog/17333/webkit-features-in-safari-26-0/",
+    "https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/ConfiguringWebApplications/ConfiguringWebApplications.html"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-INS-007",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ins_colors",
+   "title": "Theme and background colours agree, and the first frame is not white",
+   "statement": "The theme-color meta MUST equal the manifest theme_color, the manifest MUST set background_color, and html or body MUST paint a background colour so the launch frame is not white.",
+   "why": "web.dev says the meta tag should match theme_color. iOS does not build a splash from the manifest, so the first thing a dark app shows is whatever the page paints first.",
+   "test": "Static: compare the two colours; read the CSS for a background on html or body.",
+   "refs": [
+    "https://web.dev/articles/add-manifest"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-INS-008",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "ins_status_bar",
+   "title": "The status bar style is a deliberate choice",
+   "statement": "apple-mobile-web-app-status-bar-style SHOULD be set. black-translucent SHOULD be used only with a top-inset fallback (a max() of a fixed padding and env(safe-area-inset-top)) that has been verified on the shipping iOS release.",
+   "why": "WebKit bug 301994 reports iOS 26.1 and later with black-translucent and env(safe-area-inset-top) returning 0, which puts the header under the clock. The bug was reopened on 2026-08-04 after a reported fix. The template therefore ships black.",
+   "test": "Static: the meta is set; if it is black-translucent the CSS contains a max() around the top inset. Device: DEV-003.",
+   "refs": [
+    "https://bugs.webkit.org/show_bug.cgi?id=301994"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-001",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "shl_viewport",
+   "title": "The viewport meta",
+   "statement": "The viewport meta MUST be width=device-width, initial-scale=1, viewport-fit=cover.",
+   "why": "viewport-fit=cover is what makes env(safe-area-inset-*) non-zero. Without it the layout looks right in a simulator and clips on the phone. The zoom-limiting keys are covered by NW-ACC-001.",
+   "test": "Static: parse the meta content.",
+   "refs": [
+    "https://webkit.org/blog/7929/designing-websites-for-iphone-x/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-002",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "shl_safe_area",
+   "title": "Safe-area insets are added to real padding, on all four sides",
+   "statement": "Fixed edge UI MUST add env(safe-area-inset-top), -right, -bottom and -left to real padding with calc() or max(), never use the inset alone.",
+   "why": "The insets are 0 on a phone without a notch, so an inset-only value gives a cramped header. In landscape the left and right insets become non-zero.",
+   "test": "Static: all four env() names appear and at least one sits inside calc() or max(). Device: rotate to landscape on a notched iPhone (DEV-003).",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/env"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-003",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "shl_scroll_model",
+   "title": "The page never scrolls; lists scroll in their own box",
+   "statement": "html and body MUST have overflow hidden and overscroll-behavior none. Only lists scroll, each in its own box with overflow-y auto and overscroll-behavior contain.",
+   "why": "Law 17: a settings page that scrolls hides controls behind a gesture. overscroll-behavior needs iOS 16, so overflow hidden on the root is the part that works everywhere. Whether none removes all rubber-banding on iOS 26 is not confirmed by any source read.",
+   "test": "Static: the CSS rules exist. Device: drag on the header and on empty space; nothing moves.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/overscroll-behavior"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-004",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "shl_no_100vh",
+   "title": "The shell is sized with 100% or dvh, never 100vh",
+   "statement": "The app shell MUST be sized with height 100% on html and body, or with dvh, and MUST NOT use 100vh.",
+   "why": "vh is the layout viewport and ignores browser chrome. In an installed app there is no collapsing bar, so 100% is the stable choice. dvh needs Safari 15.4.",
+   "test": "Static: no 100vh in any CSS file.",
+   "refs": [
+    "https://webkit.org/blog/12445/new-webkit-features-in-safari-15-4/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-005",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "shl_input_font",
+   "title": "Form controls render at 16px or larger",
+   "statement": "The CSS MUST set font-size of at least 16px on input, textarea and select.",
+   "why": "iOS Safari zooms in when a focused field has a computed font size under 16px, and does not zoom back out. The cure is the size, not disabling zoom. The threshold is consistent across secondary sources; no WebKit statement was found.",
+   "test": "Static: a rule for input, textarea and select with font-size of 16px or more (or 1rem at a 16px root). Device: tap each field; the page does not zoom.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-006",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "shl_touch_action",
+   "title": "touch-action: manipulation on controls, never on html or body",
+   "statement": "The CSS MUST set touch-action: manipulation on buttons, tabs and links, and MUST NOT set it on html, body or *.",
+   "why": "manipulation removes the double-tap-zoom handling on the element and keeps pan and pinch. An October 2025 report found it on the root element stopped the keyboard appearing in an installed PWA. That report is secondary and unverified here, but the rule costs nothing.",
+   "test": "Static: the declaration exists and no root-level selector carries it.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-007",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "shl_selection",
+   "title": "Chrome is unselectable, content is selectable",
+   "statement": "user-select: none SHOULD be set on buttons, bars and gesture surfaces only. It SHOULD NOT be set on html, body or *, so readable content stays selectable.",
+   "why": "Selectable text is needed for copy, Look Up, Speak Selection and translation. Dragging chrome starting a selection is the reason for the rule, so scope it to the chrome.",
+   "test": "Static: no root-level selector carries user-select: none. Device: long-press a data value; selection handles appear.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-008",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "shl_text_size",
+   "title": "Text size is locked against landscape inflation and the system font is used",
+   "statement": "html SHOULD set -webkit-text-size-adjust: 100%, and the font stack SHOULD start with system-ui or -apple-system.",
+   "why": "Safari inflates text in landscape without it. The system font renders in SF Pro and costs zero bytes.",
+   "test": "Static: both declarations exist.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-009",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "shl_format_detection",
+   "title": "Phone-number auto-linking is switched off",
+   "statement": "index.html SHOULD set meta format-detection to telephone=no unless the app wants numbers dialled.",
+   "why": "By default Safari on iOS turns any string shaped like a phone number into a call link. Dashboards full of ids and timestamps get mangled.",
+   "test": "Static: the meta exists.",
+   "refs": [
+    "https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-SHL-010",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "shl_keyboard",
+   "title": "Text-entry screens follow the visual viewport",
+   "statement": "If the app has text inputs it SHOULD size to window.visualViewport (resize and scroll events) so the focused field and its action stay reachable with the keyboard open, and SHOULD NOT depend on interactive-widget.",
+   "why": "On iOS the keyboard shrinks the visual viewport and leaves the layout viewport alone. interactive-widget is documented for Chrome on Android only. One developer reports an installed-app bug on iOS 17 and 18 where the first keyboard open leaves the height permanently low; that report is unverified on iOS 26.",
+   "test": "Static: if inputs exist, the JavaScript uses visualViewport. Device: DEV-003.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/Viewport_concepts"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-IOS-001",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ios_standalone",
+   "title": "Install state is detected three ways",
+   "statement": "If the app changes behaviour based on install state, it MUST test display-mode: standalone, display-mode: fullscreen and navigator.standalone.",
+   "why": "MDN's compatibility data records that an installed iOS web app reports display-mode: fullscreen, not standalone (WebKit bug 264218, open). navigator.standalone is iOS-only. On iOS 26 a standalone site no longer implies a manifest.",
+   "test": "Static: if the JavaScript mentions display-mode or navigator.standalone, all three tests are present. Device: log all three in the installed app.",
+   "refs": [
+    "https://bugs.webkit.org/show_bug.cgi?id=264218",
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/display-mode"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-IOS-002",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ios_no_ua",
+   "title": "No user-agent sniffing for the OS version",
+   "statement": "The app MUST NOT parse navigator.userAgent to learn the iOS version. It MUST feature-detect instead.",
+   "why": "Safari 26 reports a frozen OS version in its user-agent string on iOS 26 and iPadOS 26. To learn a user's version, ask them to read Settings, General, About.",
+   "test": "Static: no userAgent parsing in the JavaScript.",
+   "refs": [
+    "https://developer.apple.com/tutorials/data/documentation/safari-release-notes/safari-26-release-notes.md"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-IOS-003",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ios_lifecycle",
+   "title": "Lifecycle events, not unload",
+   "statement": "The app MUST NOT use unload or beforeunload, MUST save on visibilitychange (hidden) and pagehide, and MUST re-check its state on visibilitychange (visible) and on pageshow when the page was restored from the back-forward cache.",
+   "why": "An installed iOS app is suspended and may be killed in the background with no event at all. Safari may restore a page from bfcache without running any script, so a timer that did not tick leaves a stale screen.",
+   "test": "Static: no unload or beforeunload listener; visibilitychange and pageshow listeners exist.",
+   "refs": [
+    "https://web.dev/articles/bfcache"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-IOS-004",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "ios_feature_detect",
+   "title": "Platform APIs are feature-detected and degrade",
+   "statement": "The app MUST NOT rely on an API that Safari on iPhone lacks (navigator.vibrate, Web Bluetooth, WebUSB, Web Serial, WebHID, showOpenFilePicker, navigator.contacts, Background Sync) without a feature test and a fallback. A wake lock MUST be re-acquired on visibilitychange, and a MediaRecorder format MUST be chosen with isTypeSupported.",
+   "why": "MDN's compatibility data shows SyncManager unsupported in Safari on iOS. Wake Lock works in an installed Home Screen app only from iOS 18.4 (WebKit bug 254545). WebM in MediaRecorder arrived in 18.4. Web Push and badging work only in an installed app.",
+   "test": "Static: each risky API found has a matching 'in' or typeof test in the same file; wakeLock use is paired with a visibilitychange handler; MediaRecorder use is paired with isTypeSupported.",
+   "refs": [
+    "https://webkit.org/blog/16574/webkit-features-in-safari-18-4/",
+    "https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-001",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_sw_present",
+   "title": "A service worker handles install, activate and fetch",
+   "statement": "public/sw.js MUST exist, MUST be registered from the app's JavaScript behind a 'serviceWorker' in navigator test, and MUST handle install, activate and fetch.",
+   "why": "A tailnet host is often asleep. The service worker turns Safari's error page into your app with your message. Chromium no longer requires a service worker to install and Safari never did, but the offline shell needs one, and service workers need a secure context, which is why nixweb serve provides HTTPS.",
+   "test": "Static: the file exists, the registration is guarded, the three listeners exist. Device: DEV-002.",
+   "refs": [
+    "https://developer.chrome.com/blog/update-install-criteria",
+    "https://webkit.org/blog/17333/webkit-features-for-safari-26-0/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-002",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_cache_names",
+   "title": "Versioned caches; old ones deleted by prefix",
+   "statement": "Cache names MUST carry a version constant that changes with the shell, and activate MUST delete only this app's older caches, matched by a name prefix.",
+   "why": "Caches are shared by the whole origin and never expire by themselves. Deleting every cache that is not the current one wipes a sibling app on the same origin.",
+   "test": "Static: a version constant feeds the cache name; activate calls caches.delete behind a startsWith test.",
+   "refs": [
+    "https://web.dev/articles/offline-cookbook"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-003",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_shell_exists",
+   "title": "Every precached URL exists",
+   "statement": "Every URL in the precache list MUST resolve to a file in public/.",
+   "why": "cache.addAll rejects if any URL fails and the whole service worker install is discarded, which silently leaves the app with no offline shell. A template copied before nixweb icons has run is the usual way to hit it.",
+   "test": "Static: read the precache array and test each entry against public/.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-004",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_guards",
+   "title": "Only same-origin GET is cached, and /ping never",
+   "statement": "The fetch handler MUST pass non-GET requests, cross-origin requests and /ping straight to the network.",
+   "why": "A cached write is a lost write. Cross-origin responses are opaque and cannot be checked. A cached /ping would report a dead host as alive.",
+   "test": "Static: the handler tests the method, the origin and the /ping path before it touches the cache. Device: offline, a ping must reject.",
+   "refs": [
+    "https://web.dev/articles/offline-cookbook"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-005",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_ok_only",
+   "title": "Only good responses are cached",
+   "statement": "Before cache.put the worker MUST check res.ok (or status 200) and a same-origin response type, MUST clone the response, and MUST pass the put to event.waitUntil.",
+   "why": "Cache.put stores any response, including 404, 500 and opaque ones. A cached 500 served as the last known answer looks like good data. Cache.add and addAll refuse non-2xx, put does not.",
+   "test": "Static: every cache.put is guarded by an ok test and is awaited through waitUntil.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/API/Cache/put"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-006",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_nav_fallback",
+   "title": "The shell is the fallback for navigations only",
+   "statement": "When the network fails the worker MUST answer a navigation with the cached shell, and MUST NOT answer an image, script, style or JSON request with index.html.",
+   "why": "HTML returned for a failed app.js breaks parsing and hides the real error. A cached HTML page can then poison the cache under a script URL.",
+   "test": "Static: every fallback to index.html is gated by request.mode === 'navigate'.",
+   "refs": [
+    "https://web.dev/articles/offline-cookbook"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-007",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_precache_fresh",
+   "title": "Precaching reads past the HTTP cache",
+   "statement": "The worker MUST precache with requests that use cache: 'reload', unless the server sends no-cache for every shell file (NW-SRV-006).",
+   "why": "cache.addAll goes through the HTTP cache. With heuristic freshness the new worker can store the old app.js and the update ships nothing.",
+   "test": "Static: the precache requests use cache: 'reload'; otherwise NW-SRV-006 passes at runtime.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching"
+   ],
+   "status": "active",
+   "since": "1.0.0",
+   "live": true
+  },
+  {
+   "id": "NW-OFF-008",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_update_via_cache",
+   "title": "Registration sets updateViaCache to none",
+   "statement": "The page MUST register sw.js at a stable URL with updateViaCache: 'none'.",
+   "why": "The spec default is 'imports': the main script bypasses the HTTP cache but imported scripts may not. A stable URL keeps the update check working; an orphaned old URL cannot be reached again. The old advice to add a version query to sw.js is outdated.",
+   "test": "Static: the register call passes updateViaCache: 'none' and a constant 'sw.js' URL.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/updateViaCache",
+    "https://www.w3.org/TR/service-workers/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-009",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "off_update_flow",
+   "title": "Updates are user-gated",
+   "statement": "The worker SHOULD NOT call skipWaiting during install. It SHOULD wait for a SKIP_WAITING message, and the page SHOULD show 'update ready', reload once on controllerchange, and call registration.update() when it becomes visible.",
+   "why": "skipWaiting lets a page loaded under version 1 fetch version 2 resources mid-session. Update checks run on navigation, and an installed iOS app can stay resident for days (anecdotal, unverified), so ask for one when the app returns to the foreground.",
+   "test": "Static: skipWaiting sits in a message handler, not in install; the page has a controllerchange listener guarded against a second reload and a visibilitychange update call. Device: DEV-004.",
+   "refs": [
+    "https://web.dev/articles/service-worker-lifecycle"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-010",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_probe",
+   "title": "Reachability is probed, not guessed",
+   "statement": "The app MUST decide whether the server is reachable with a fetch of /ping that uses cache: 'no-store' and a timeout, and MUST NOT gate behaviour on navigator.onLine alone.",
+   "why": "navigator.onLine says the radio is up. It is true on a captive-portal wifi and when the tailnet is down. MDN: do not disable features based on online status.",
+   "test": "Static: the JavaScript fetches ping with no-store and an abort signal.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/API/Navigator/onLine"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-011",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_fetch_timeout",
+   "title": "Every fetch has a timeout",
+   "statement": "Every fetch call MUST carry an AbortSignal, from AbortSignal.timeout or an AbortController with a timer, so a sleeping host cannot hang the screen.",
+   "why": "A host that is asleep over Tailscale often hangs instead of refusing, and fetch has no default timeout. AbortSignal.timeout works in Safari 16 and later, but its timer pauses while a page sits in the back-forward cache, so use a controller where wall time matters.",
+   "test": "Static: each fetch call has a signal option within its argument list. A justified exception carries nixweb-allow: NW-OFF-011 and a reason.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-012",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "off_error_boundary",
+   "title": "Errors paint a screen, never a blank page",
+   "statement": "The app MUST register window error and unhandledrejection listeners that show a visible error with a Reload control, and index.html MUST contain a noscript message.",
+   "why": "An uncaught exception during startup leaves a white screen on iOS with no console. Promise rejections arrive on unhandledrejection, not on error.",
+   "test": "Static: both listeners exist and a noscript element exists. Device: throw an error on purpose and watch the error card.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/API/Window/unhandledrejection_event"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-OFF-013",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "off_api_policy",
+   "title": "Runtime caching of API data is bounded and private-aware",
+   "statement": "If the worker caches API responses it SHOULD skip responses marked no-store or private, SHOULD cap the number of cached entries, and SHOULD mark answers served from cache.",
+   "why": "Cache Storage is origin-wide and persists on the device, so on a lost phone it is data at rest. A silent stale answer is a lie; mark it so the screen can say 'last known data'.",
+   "test": "Static: the API branch checks cache-control, trims the cache and sets a marker header. Not applicable if the worker caches no API data.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-DAT-001",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "dat_outbox",
+   "title": "Offline writes queue in IndexedDB and replay from the open page",
+   "statement": "If the app sends writes, a write that fails or happens offline MUST be stored in an IndexedDB outbox, shown as pending, and replayed when the app opens, becomes visible, comes back online or answers /ping. Background Sync MUST NOT be the only trigger.",
+   "why": "Background Sync is not in Safari or Firefox, so a service worker cannot flush the queue on iOS. The one dependable trigger on iOS is the app being open.",
+   "test": "Static: if any fetch uses POST, PUT, PATCH or DELETE, indexedDB is used. Not applicable otherwise. Device: DEV-007.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/API/Background_Synchronization_API",
+    "https://raw.githubusercontent.com/mdn/browser-compat-data/main/api/SyncManager.json"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-DAT-002",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "dat_idempotency",
+   "title": "Every replayable write carries an idempotency key",
+   "statement": "If the app sends writes, each one MUST carry an Idempotency-Key header made when the user acted (crypto.randomUUID), reused on every retry, and the server MUST return the stored answer for a repeated key.",
+   "why": "A write can succeed while the response is lost when the tunnel drops. A naive retry then duplicates it. The header is an IETF draft, not an RFC, so the server contract is yours to document.",
+   "test": "Static: writes set Idempotency-Key. Runtime: send the same keyed POST twice; one row changes and both answers match.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Idempotency-Key"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-DAT-003",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "dat_storage",
+   "title": "Storage use is guarded and small",
+   "statement": "localStorage and sessionStorage access SHOULD sit inside try and catch and SHOULD hold small flags only. Structured or large data belongs in IndexedDB.",
+   "why": "Storage can be blocked, full or evicted. localStorage is synchronous, so a large value read at startup blocks input.",
+   "test": "Static: every localStorage or sessionStorage use is inside a try block, and no JSON.stringify value is stored in localStorage.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-DAT-004",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "process",
+   "title": "Device storage is rebuildable; first-run state never depends on Safari",
+   "statement": "Irreplaceable data MUST live on the host, and every byte on the device (Cache, IndexedDB, localStorage) MUST be treatable as a cache or a short outbox. Setup and first-run state MUST NOT depend on Safari, because the Home Screen app does not share storage with it.",
+   "why": "WebKit says the Home Screen app and Safari keep separate storage by design (bug 181849). Script-writable storage in a Safari tab is cleared after 7 days without interaction; installed apps are exempt from that cap, but treat that as a bonus, not a promise. Nothing was found on what deleting and re-adding the icon does.",
+   "test": "Process: delete and re-add the icon on a test phone; nothing important is lost. Set a value in Safari, install, and confirm the app does not see it.",
+   "refs": [
+    "https://webkit.org/tracking-prevention/",
+    "https://bugs.webkit.org/show_bug.cgi?id=181849",
+    "https://webkit.org/blog/14403/updates-to-storage-policy/"
+   ],
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DAT-005",
+   "level": 3,
+   "keyword": "SHOULD",
+   "method": "process",
+   "title": "A conflict rule is written down before offline writes ship",
+   "statement": "Each record type with offline writes SHOULD have one documented conflict rule: last write wins with a version check, or reject with 409 and show the server copy.",
+   "why": "Two devices can edit the same item while one is offline. An If-Match precondition turns a silent overwrite into a prompt, which matches the rule that writes confirm.",
+   "test": "Process: edit one record on two devices with one offline; on reconnect the offline one shows a conflict.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-UIX-001",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "uix_confirm",
+   "title": "Writes confirm, with specific wording",
+   "statement": "Before any send, merge, delete or outward-facing action the app MUST show a confirmation that names the object and the consequence, with outcome-labelled buttons and focus on the safe choice. A reversible action SHOULD offer Undo instead.",
+   "why": "Reads are free; writes confirm. Nielsen Norman Group: undo is the stronger safeguard, generic 'Are you sure?' dialogs train click-through, and the safe choice must not be the default Yes.",
+   "test": "Static: if the app sends writes, it uses a dialog element with showModal or a confirm call. Not applicable otherwise. Device: DEV-007.",
+   "refs": [
+    "https://www.nngroup.com/articles/confirmation-dialog/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-UIX-002",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "Every view has loading, empty, error and stale states",
+   "statement": "Every view MUST render an explicit loading state, an empty state, an error state with a Retry control, and a stale state that shows the age of cached data. A container MUST never be left empty.",
+   "why": "A blank list is indistinguishable from a bug. The honest-offline goal needs 'server unreachable, showing data from 14:02'.",
+   "test": "Device or browser: go offline, return an empty list, return a 500, and delay the answer 10 seconds; each shows its own state.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-UIX-003",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "Every screen below the first has an in-app Back",
+   "statement": "Every screen below the first MUST have a visible Back control in the app's own header, and any history.pushState use MUST match it.",
+   "why": "An installed iOS app has no browser back button. Whether an edge-swipe back gesture exists in installed apps on iOS 26 is not documented in any source read.",
+   "test": "Device: open a detail view; Back and the edge swipe agree and neither exits the app.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-UIX-004",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "uix_version",
+   "title": "The running version is visible",
+   "statement": "The app SHOULD show the shell version where a person can read it, and the worker SHOULD report the same string.",
+   "why": "iOS Home Screen apps are reported to keep old content after a deploy, and the fastest way to tell stale from fresh on a phone is a visible version. It also lets support say 'you should see v7'.",
+   "test": "Static: index.html has an element with id version, or the JavaScript writes one. Device: it equals the VERSION in sw.js.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-001",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "acc_zoom",
+   "title": "Zoom is never disabled",
+   "statement": "The viewport meta MUST NOT contain user-scalable=no, user-scalable=0, maximum-scale or minimum-scale.",
+   "why": "WCAG 1.4.4 requires text to resize to 200 percent. WebKit has ignored these keys since iOS 10, so on iPhone the tag does nothing and only fails the audit; elsewhere it blocks zoom. The input-zoom problem is solved by NW-SHL-005, not by this tag.",
+   "test": "Static: parse the viewport meta.",
+   "refs": [
+    "https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html",
+    "https://webkit.org/blog/7367/new-interaction-behaviors-in-ios-10/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-002",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "acc_basics",
+   "title": "Language, title, one h1 and a main landmark",
+   "statement": "index.html MUST set the html lang attribute, a non-empty title, exactly one h1 and a main landmark.",
+   "why": "WCAG 3.1.1, 2.4.2 and 1.3.1. Screen readers choose a voice from lang, and landmarks let people skip to the content.",
+   "test": "Static: parse index.html.",
+   "refs": [
+    "https://www.w3.org/TR/WCAG22/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-003",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "acc_names",
+   "title": "Every control has a name and every image has alt",
+   "statement": "Every button, link, input, select and textarea MUST have an accessible name from text, aria-label, aria-labelledby or a label element, and every img MUST have an alt attribute.",
+   "why": "WCAG 4.1.2 and 1.1.1. A title attribute alone is not reliable on touch. Use native elements first: no ARIA is better than bad ARIA.",
+   "test": "Static: parse index.html. Dynamically created controls need the same care; verify them with axe or VoiceOver.",
+   "refs": [
+    "https://www.w3.org/WAI/ARIA/apg/practices/read-me-first/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-004",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "acc_focus",
+   "title": "A visible focus style",
+   "statement": "The CSS MUST style :focus-visible with an outline of at least 2px that contrasts 3:1 with its surroundings, and MUST NOT remove outlines without replacing them.",
+   "why": "WCAG 2.4.7 and 1.4.11. A keyboard or switch user on an iPad or iPhone has no other cue.",
+   "test": "Static: a :focus-visible rule with an outline exists; no outline: none without one. Device: Tab through the app with a hardware keyboard.",
+   "refs": [
+    "https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-005",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "acc_scroll_padding",
+   "title": "Fixed bars never hide the focused control",
+   "statement": "A scrolling region under a fixed header or tab bar SHOULD set scroll-padding equal to the bars' height.",
+   "why": "WCAG 2.4.11 (new in 2.2): a focused component must not be entirely hidden by a sticky bar.",
+   "test": "Static: scroll-padding or scroll-margin exists in the CSS.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-006",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "acc_live",
+   "title": "Status changes are announced",
+   "statement": "A banner or toast that appears without receiving focus MUST sit in an element with role status, role alert or aria-live, present in the markup before its text changes.",
+   "why": "WCAG 4.1.3. A live region that is inserted or unhidden together with its content is often not announced, so keep the container present and change its text.",
+   "test": "Static: every element that looks like a banner or toast has a live role. Device: VoiceOver on, switch the host off; the message is spoken without moving focus.",
+   "refs": [
+    "https://www.w3.org/TR/WCAG22/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-007",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "acc_motion",
+   "title": "Reduced motion is honoured",
+   "statement": "If the CSS animates or transitions anything, it MUST also contain a prefers-reduced-motion rule that removes the non-essential motion.",
+   "why": "Large scaling and panning can trigger vestibular disorders. The query is Baseline widely available.",
+   "test": "Static: if animation or transition appears, a prefers-reduced-motion media query exists. Not applicable otherwise.",
+   "refs": [
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-008",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "acc_scheme",
+   "title": "The colour scheme is declared",
+   "statement": "The app SHOULD declare color-scheme in a meta tag and in CSS, and SHOULD ship a palette for every scheme it declares.",
+   "why": "Native controls and scrollbars follow color-scheme. An empty light-mode stub that declares nothing leaves form controls mismatched.",
+   "test": "Static: both declarations exist, and if light is declared a prefers-color-scheme rule has content.",
+   "refs": [
+    "https://webkit.org/blog/15865/webkit-features-in-safari-18-0/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-009",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "acc_nav_state",
+   "title": "Navigation has a name and exposes the active item",
+   "statement": "A nav landmark MUST have an aria-label, and the active tab or view MUST be exposed with aria-current, aria-selected or aria-pressed, not by colour alone.",
+   "why": "WCAG 1.4.1 and 4.1.2. A tab bar where the active state is only a colour class is invisible to a screen reader.",
+   "test": "Static: nav has aria-label; the markup or the JavaScript sets aria-current, aria-selected or aria-pressed.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-010",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "acc_contrast",
+   "title": "Declared text colours meet contrast",
+   "statement": "Every CSS rule that sets both a text colour and a background MUST give a contrast ratio of at least 4.5:1 (3:1 for text of 24px, or 18.66px bold, and larger).",
+   "why": "WCAG 1.4.3. The checker only sees pairs declared in the same rule, so axe on the running app (NW-ACC-011) covers the rest.",
+   "test": "Static: resolve colours and custom properties, compute the WCAG ratio.",
+   "refs": [
+    "https://www.w3.org/TR/WCAG22/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-ACC-011",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "Touch targets are at least 44px",
+   "statement": "Every tappable control MUST be at least 44x44 CSS px including padding, with 8px between neighbours, and never below the WCAG 2.2 floor of 24x24 px.",
+   "why": "Apple's figure is 44 points (secondary sources agree; the HIG page did not load for the researcher). WCAG 2.5.8 sets 24px with exceptions. Design to the larger number, audit to the smaller.",
+   "test": "Device or DevTools: measure each control; run axe, which has a target-size rule.",
+   "refs": [
+    "https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html"
+   ],
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-ACC-012",
+   "level": 3,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "A VoiceOver walkthrough, with Larger Text and Reduce Motion",
+   "statement": "Before a Level 3 claim, a person MUST walk through every screen with VoiceOver on an iPhone with the app installed, with Larger Text at its maximum, Reduce Motion on and Increase Contrast on, and record the result.",
+   "why": "Automated tools find only a minority of WCAG problems. Live regions and focus behave differently per platform.",
+   "test": "Device: Settings, Accessibility. Swipe through every control; each has a name and role; operate each by double-tap; trigger an error and a toast; record in device-test.md.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-ACC-013",
+   "level": 3,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "acc_relative",
+   "title": "Font sizes are relative, so Larger Text works",
+   "statement": "Font sizes SHOULD be in rem or em, with the root following the system text size, instead of fixed px values.",
+   "why": "Fixed px sizes ignore the reader's text-size setting. The font: -apple-system-body mechanism for Dynamic Type is from memory and unverified in installed apps, so test it on a device.",
+   "test": "Static: most font-size declarations are not px.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-PER-001",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "per_budget",
+   "title": "A small first-load budget",
+   "statement": "The shell (HTML, CSS and JavaScript together) SHOULD stay under 170 KB uncompressed, JavaScript under 100 KB, and the precache list at 12 files or fewer.",
+   "why": "web.dev's budget is 170 KB compressed for the critical path and a time to interactive of 5 seconds on baseline phones. The 100 KB and 12-file figures are this standard's recommendation, not a published number. A no-build app should sit far below.",
+   "test": "Static: sum the sizes of the HTML, CSS and JS files in public/.",
+   "refs": [
+    "https://web.dev/articles/performance-budgets-101"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-PER-002",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "per_script_loading",
+   "title": "Scripts do not block rendering",
+   "statement": "Scripts SHOULD load with defer or type=module, or sit at the end of body, and index.html SHOULD NOT preload anything except a late-discovered main image.",
+   "why": "Render-blocking scripts delay the first paint. Preloading everything dilutes priority.",
+   "test": "Static: every script element has defer or type=module, or follows the main content.",
+   "refs": [
+    "https://web.dev/articles/optimize-lcp"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-PER-003",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "per_assets",
+   "title": "System fonts, sized images",
+   "statement": "The app SHOULD use the system font stack. A custom face SHOULD be a self-hosted WOFF2 with font-display, and every img SHOULD have width and height.",
+   "why": "A web font is a render and layout-shift risk and one more file the service worker must precache. Reserved image space prevents layout shift.",
+   "test": "Static: no @font-face from another origin; each @font-face has font-display; each img has width and height.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-PER-004",
+   "level": 3,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "Core Web Vitals are measured on a real phone",
+   "statement": "Before a Level 3 claim the app MUST be measured on a real phone and meet LCP of 2.5 s or less, INP of 200 ms or less and CLS of 0.1 or less, and the numbers MUST be recorded.",
+   "why": "These are the current good thresholds at the 75th percentile. LCP and CLS are Chromium APIs, so measure in Chrome DevTools with 4x CPU throttling and judge feel in Safari.",
+   "test": "Device: Chrome DevTools Performance with throttling; Safari Web Inspector timelines on the phone.",
+   "refs": [
+    "https://web.dev/articles/vitals",
+    "https://web.dev/articles/inp"
+   ],
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DOC-001",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "doc_why",
+   "title": "Every iOS-quirk CSS rule carries a WHY comment",
+   "statement": "Every CSS declaration that exists for a platform quirk (safe-area insets, overscroll-behavior, touch-action, user-select, text-size-adjust, tap-highlight, overflow-scrolling) MUST have a comment containing WHY on the same line or in the preceding four lines.",
+   "why": "Someone will delete an unexplained rule, and then wonder six months later why dragging highlights text.",
+   "test": "Static: for each such declaration, look back four lines for a comment with WHY.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-DOC-002",
+   "level": 2,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "doc_agents",
+   "title": "AGENTS.md tells an AI agent how to work in the app",
+   "statement": "The app SHOULD have an AGENTS.md that states the conformance level, the check command, the hard constraints, and what needs a human.",
+   "why": "agents.md is a plain Markdown format read by many coding agents. A short file beats an agent guessing the rules.",
+   "test": "Static: AGENTS.md exists and mentions nixweb check.",
+   "refs": [
+    "https://agents.md"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-DOC-003",
+   "level": 3,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "doc_claim",
+   "title": "A conformance claim is published",
+   "statement": "A Level 3 app MUST contain a CONFORMANCE.md that names the standard and edition, the level, the date, the tester, the rules marked not applicable with a reason, and any exceptions.",
+   "why": "A claim is only worth something if it names an edition and can be re-checked. Claims are self-attested unless a third party signs.",
+   "test": "Static: CONFORMANCE.md has non-empty Standard, Level, Date and Tester lines.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-DOC-004",
+   "level": 3,
+   "keyword": "MUST",
+   "method": "static",
+   "check": "doc_device_record",
+   "title": "A real-device test is on record",
+   "statement": "A Level 3 app MUST contain a device-test.md with the device model, the iOS version, the date, the tester and a result for each device rule.",
+   "why": "Add to Home Screen, safe areas, the keyboard and offline launch can only be verified on a phone. Remote debugging needs a Mac (Safari Web Inspector); from Linux, a fleet Mac is the practical inspector host.",
+   "test": "Static: device-test.md has non-empty iOS, Device, Date and Tester lines.",
+   "refs": [
+    "https://webkit.org/web-inspector/enabling-web-inspector/"
+   ],
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-DOC-005",
+   "level": 3,
+   "keyword": "SHOULD",
+   "method": "static",
+   "check": "doc_changelog",
+   "title": "A change log is kept",
+   "statement": "The app SHOULD keep a CHANGELOG.md or CHANGE.log with a dated line for each release.",
+   "why": "It answers 'what did I ship and when' and ties a deployed VERSION to a change.",
+   "test": "Static: the file exists and is not empty.",
+   "status": "active",
+   "since": "1.0.0"
+  },
+  {
+   "id": "NW-DEV-001",
+   "level": 1,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "Installed on a real iPhone and opens as its own app",
+   "statement": "The app MUST be added to the Home Screen of a real iPhone and open standalone, with its own icon, its own name and no browser bar.",
+   "why": "Nothing else proves the install path. WebKit states a qualifying site opens as a standalone web app no matter which browser added it (iOS 16.4 and later), and on iOS 26 the user can turn Open as Web App off in the Add to Home Screen sheet. Test from Safari first.",
+   "test": "Device: Share, Add to Home Screen with Open as Web App on. The icon is your artwork, the app has its own App Switcher entry, and standalone detection reports true.",
+   "refs": [
+    "https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/",
+    "https://webkit.org/blog/17333/webkit-features-for-safari-26-0/"
+   ],
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DEV-002",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "Offline launch shows the app and says so honestly",
+   "statement": "With the host stopped and the app force-quit, launching it MUST paint the shell within about a second, show cached data, and show a banner that says the server is unreachable with the time of the last good contact and a Retry control.",
+   "why": "This is the product promise: your app with your message, not Safari's error page.",
+   "test": "Device: stop the server, force-quit the app, launch it. Repeat with Tailscale switched off on the phone.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DEV-003",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "Safe areas and the keyboard work on a real phone",
+   "statement": "On a notched iPhone, in portrait and landscape, the header and tab bar MUST clear the notch, the Dynamic Island and the home indicator, and a focused input MUST stay visible with the keyboard open and the layout MUST recover when it closes.",
+   "why": "The simulator can look right while the phone clips the top row. The status-bar and keyboard behaviour on iOS 26 has open WebKit bugs.",
+   "test": "Device: rotate; focus an input in the lower half; dismiss the keyboard three times.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DEV-004",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "The update flow works end to end",
+   "statement": "With the app installed and open, deploying a new version MUST produce an update prompt, one reload on acceptance, and a changed version string.",
+   "why": "iOS update timing for installed apps is unverified in the sources read, so only a device test can say.",
+   "test": "Device: install version 1, deploy version 2, background and reopen the app, tap the prompt.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DEV-005",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "External links are tested and recorded",
+   "statement": "The result of tapping an external link in the installed app MUST be recorded for the target iOS version, and the app MUST offer a Copy link action for anything that has to reach Safari.",
+   "why": "Secondary sources say out-of-scope links open in an in-app sheet, not Safari. The earlier docs said Safari. No primary source was found, so test it.",
+   "test": "Device: tap an external link; note whether it opens a sheet with a Done button or leaves the app; app state must survive.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DEV-006",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "Permission prompts appear only after a tap",
+   "statement": "If the app uses notifications, the microphone, the camera or location, the system prompt MUST appear only after the user taps an explicit control, and the app MUST explain when a feature needs the Home Screen install.",
+   "why": "WebKit requires a user gesture for the notification prompt, and Web Push and badging work only in an installed app. A prompt on load wastes the one chance.",
+   "test": "Device: fresh install shows no prompt until the control is tapped. Not applicable if the app uses none of them.",
+   "refs": [
+    "https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/"
+   ],
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DEV-007",
+   "level": 2,
+   "keyword": "MUST",
+   "method": "device",
+   "title": "Write flows are exercised",
+   "statement": "If the app sends writes, each MUST be tried on a phone: the confirmation wording, Undo, and an offline write that replays once after reconnecting without duplicating.",
+   "why": "Confirm and replay logic only fails under real network loss.",
+   "test": "Device: airplane mode, perform a write, restore the network, confirm exactly one result. Not applicable if the app sends no writes.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DEV-008",
+   "level": 3,
+   "keyword": "SHOULD",
+   "method": "device",
+   "title": "Android Chrome install is checked when Android is claimed",
+   "statement": "If the app claims Android support, it SHOULD be installed from Chrome on a real Android phone and checked in the DevTools Application panel with no installability errors.",
+   "why": "Chromium's installability and maskable-icon rules differ from Safari's. Lighthouse no longer scores PWAs, so use the DevTools Manifest panel.",
+   "test": "Device: Chrome menu, Install app; DevTools, Application, Manifest shows no errors.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  },
+  {
+   "id": "NW-DEV-009",
+   "level": 3,
+   "keyword": "MAY",
+   "method": "device",
+   "title": "An idle-storage test",
+   "statement": "A Level 3 app MAY record what an installed copy keeps after 8 to 10 days unused.",
+   "why": "No 2026 source was found on real iOS eviction for installed apps. WebKit says Home Screen apps are exempt from the 7-day cap, and a test is the only evidence.",
+   "test": "Device: leave an installed copy unused for 8 to 10 days on a spare phone, then open it offline.",
+   "status": "active",
+   "since": "1.0.0",
+   "check": null
+  }
+ ]
+}

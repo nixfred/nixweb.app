@@ -1,0 +1,118 @@
+/* nixweb.app template stylesheet. Every rule marked WHY exists because of a specific iPhone
+   behaviour or a numbered rule of the NixWeb Standard (STANDARD.md). Delete at your peril. */
+
+:root{
+  /* WHY: tells the browser this app is dark, so scrollbars and form controls match. For a light
+     theme change it to "dark light", change the meta tag, and define the tokens in a
+     prefers-color-scheme: light block. */
+  color-scheme:dark;
+  --bg:#070a0f; --panel:#0b1018; --card:#0e1623; --line:#1a2635;
+  --txt:#d3dde8; --dim:#8694a5; --accent:#00f0ff; --ok:#7cff00; --warn:#ffb000;
+  /* WHY: the safe-area insets are 0 unless the viewport meta says viewport-fit=cover. They are
+     the notch, the Dynamic Island, the home indicator and, in landscape, the sensor housing. */
+  --top:env(safe-area-inset-top, 0px);
+  --bottom:env(safe-area-inset-bottom, 0px);
+  --left:env(safe-area-inset-left, 0px);
+  --right:env(safe-area-inset-right, 0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;
+  /* WHY: iOS flashes a grey box on every tap. Our own :active styles replace it. */
+  -webkit-tap-highlight-color:transparent}
+
+html{font-size:100%}
+/* WHY: on iOS this makes rem follow the Larger Text setting (Dynamic Type). Browsers that do
+   not know the keyword skip the block. Not yet verified in an installed app: test it on a
+   device (NW-ACC-013). */
+@supports (font:-apple-system-body){html{font:-apple-system-body}}
+
+html,body{
+  height:100%;
+  /* WHY: the page itself must never scroll. If it does, the whole app rubber-bands and the
+     header detaches from the top. Only .scroll scrolls (Law 17). */
+  overflow:hidden;
+  overscroll-behavior:none;
+  background:var(--bg); color:var(--txt);
+  /* WHY: stops Safari inflating text when the phone rotates. */
+  -webkit-text-size-adjust:100%;
+}
+body{
+  font-family:system-ui,-apple-system,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:1rem;line-height:1.55;
+}
+
+/* WHY: dragging on chrome (bars, buttons, tabs) otherwise starts a text selection and a blue
+   highlight chases the thumb. Content stays selectable so people can copy it, Look Up and
+   translate it. */
+.bar,.tabs,button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+
+/* WHY: manipulation drops the double-tap-zoom handling on controls and keeps pan and pinch.
+   Never put it on html or body: a report says it stops the keyboard appearing in an installed app. */
+button,.tab,a{touch-action:manipulation}
+
+/* WHY: iOS Safari zooms the page when a focused field renders under 16px and does not zoom
+   back out. The cure is the size, not turning zoom off (NW-SHL-005). */
+input,textarea,select{font-size:max(16px,1rem);font-family:inherit}
+
+/* WHY: a visible focus ring is the only cue a keyboard or switch user has (WCAG 2.4.7). */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{height:100%;display:flex;flex-direction:column;padding-left:var(--left);padding-right:var(--right)}
+
+.bar{
+  flex:0 0 auto;display:flex;align-items:center;gap:.625rem;
+  /* WHY: the inset is ADDED to real padding. The inset alone gives a cramped header on a phone
+     with no notch. */
+  padding:calc(var(--top) + .625rem) 1rem .625rem;
+  background:var(--panel);border-bottom:1px solid var(--line);
+}
+.bar h1{font-size:1.0625rem;font-weight:700;color:#fff;letter-spacing:.02rem}
+.bar .ghost{margin-left:auto;background:none;border:0;color:var(--dim);font-size:1.25rem;
+  min-width:44px;min-height:44px;border-radius:.5rem}
+.bar .ghost:active{background:var(--card);color:#fff}
+
+.dot{width:.5625rem;height:.5625rem;border-radius:50%;background:var(--ok);flex:0 0 auto}
+.dot.off{background:var(--warn)}
+.state{font-size:.8125rem;color:var(--dim)}
+
+.banner{flex:0 0 auto;background:#2a1d05;color:var(--warn);padding:.5625rem 1rem;
+  font-size:.84375rem;border-bottom:1px solid #4d3d1c}
+.banner.update{background:#06242a;color:var(--accent);border-bottom-color:#0b4a55}
+.banner button,.fatal button{margin-left:.5rem;min-height:44px;padding:0 .875rem;border:1px solid currentColor;
+  border-radius:.5rem;background:transparent;color:inherit;font:inherit;font-weight:700}
+.fatal{margin:1rem;padding:1rem;background:#2a0a0a;color:#ffb3ad;border:1px solid #5a1f1f;border-radius:.75rem}
+.fatal-static{padding:1rem;color:#ffb3ad}
+/* An empty live region takes no space. app.js fills it only when there is something to say. */
+.banner:empty,.fatal:empty{display:none}
+
+/* WHY: this is the only scrolling box. overscroll-behavior contain keeps the bounce inside it
+   and out of the page. scroll-padding keeps a focused control clear of the bars (WCAG 2.4.11). */
+.scroll{
+  flex:1 1 auto;min-height:0;overflow-y:auto;
+  overscroll-behavior:contain;
+  scroll-padding-block:1rem;
+  padding:.875rem 1rem calc(.875rem + var(--bottom));
+  display:flex;flex-direction:column;gap:.75rem;
+}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:.75rem;padding:.875rem 1rem}
+.card h2{font-size:.9375rem;color:#fff;margin-bottom:.4375rem}
+.card p{margin-bottom:.5rem}
+.card p:last-child{margin-bottom:0}
+.card ul{margin:0 0 0 1.125rem}
+.card li{margin-bottom:.3125rem}
+.dim{color:var(--dim);font-size:.8125rem}
+
+.tabs{
+  flex:0 0 auto;display:flex;background:var(--panel);border-top:1px solid var(--line);
+  /* WHY: the bottom inset keeps the tab bar clear of the home indicator. Without it the last
+     34px of the UI is unreachable on a modern iPhone. */
+  padding-bottom:var(--bottom);
+}
+.tab{flex:1;min-height:44px;background:none;border:0;color:var(--dim);
+  padding:.8125rem 0;font-size:.75rem;font-weight:600;letter-spacing:.025rem;
+  border-top:2px solid transparent;margin-top:-1px}
+.tab.on{color:var(--accent);border-top-color:var(--accent)}
+.tab:active{background:var(--card)}
+
+/* Motion: this template animates nothing. If you add a transition or animation, also add
+   @media (prefers-reduced-motion: reduce) that switches it off (NW-ACC-007). */
