@@ -1,13 +1,13 @@
 # Where to serve it
 
-| Host | What it is | Serve here when |
+| Machine | What it is | Serve here when |
 |---|---|---|
-| `gus` | Desk machine, RTX 5070 12GB, Arch | The app needs the GPU (local transcription, classification), or the data already lives here, or you only use it at home |
-| `vic` | Mobile Arch laptop | The tool should follow the laptop, and you accept it is down when the lid is shut |
-| `fnix` | MacBook Pro M4 Max | You need macOS: iMessage, Apple APIs, anything the Blip bridge touches |
-| `red` / `blu` / `whi` | Always-on VPS | It must be up when every laptop is shut. `whi` also holds the fleet secrets vault |
+| Desk machine | A tower or laptop that stays on your desk, ideally with a GPU | The app needs the GPU (local transcription, classification), or the data already lives here, or you only use it at home |
+| Laptop | The machine that travels with you | The tool should follow the laptop, and you accept it is down when the lid is shut |
+| Mac | A Mac on the tailnet | You need macOS: iMessage, Apple APIs, anything that only talks to Apple software |
+| VPS | Rented, always on | It must be up when every laptop is shut |
 
-Tailnet suffix: `tail0940f.ts.net`. So gus is `gus.tail0940f.ts.net`.
+Every machine on your tailnet answers to `HOST.TAILNET.ts.net`. `tailscale status` lists them.
 
 ## The honest decision
 

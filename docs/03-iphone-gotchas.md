@@ -88,8 +88,8 @@ primary source it says so, and Appendix E of the standard lists what only a phon
 
 ## Audio and voice: read this before designing anything voice-first
 
-Two different things that people conflate. Daniel hit both, and this table is from his experience,
-not from a primary source:
+Two different things that people conflate. This table comes from one developer's field experience,
+not from a primary source, so confirm it on your own phone:
 
 | Event | Audio **capture** | Audio **playback** |
 |---|---|---|

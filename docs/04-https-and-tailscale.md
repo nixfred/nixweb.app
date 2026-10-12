@@ -6,7 +6,7 @@ Not for encryption. WireGuard already encrypts every packet between your phone a
 TLS layer adds no protection against anyone who is not already on your tailnet.
 
 The reason is the **secure context**. Browsers hide a set of APIs from any page that was not loaded
-over HTTPS (or from `localhost`), and `http://gus.tail0940f.ts.net` is neither:
+over HTTPS (or from `localhost`), and `http://HOST.TAILNET.ts.net` is neither:
 
 | Needs a secure context | Over plain http:// |
 |---|---|
@@ -21,7 +21,7 @@ So on plain HTTP the app looks fine and quietly loses its offline cache, and any
 ## How it is wired
 
 ```
-phone ──HTTPS──> tailscaled  gus.tail0940f.ts.net:8731 ──HTTP──> 127.0.0.1:8731  server.py
+phone ──HTTPS──> tailscaled  HOST.TAILNET.ts.net:8731 ──HTTP──> 127.0.0.1:8731  server.py
 ```
 
 - `server.py` listens on **127.0.0.1 only** and refuses to start on anything else (NW-NET-001). The
@@ -38,8 +38,8 @@ It is also the most common "why can't I see it" when someone skips `tailscale se
 
 ## What tailscale serve does to a request
 
-Checked on 2026-10-11 on gus, Tailscale 1.102.3, with a throwaway server that echoed the headers it
-received through a real `https://gus.tail0940f.ts.net:PORT` mapping:
+Checked on 2026-10-11 on a Linux host running Tailscale 1.102.3, with a throwaway server that echoed the headers it
+received through a real `https://HOST.TAILNET.ts.net:PORT` mapping:
 
 | What the app sees | Value |
 |---|---|
@@ -70,14 +70,14 @@ mapped to something else. Look yourself with `tailscale serve status`.
 
 ## Certificates
 
-tailscaled gets a real Let's Encrypt certificate for `<host>.tail0940f.ts.net` on the first request
+tailscaled gets a real Let's Encrypt certificate for `HOST.TAILNET.ts.net` on the first request
 (a few seconds), renews it (they last 90 days), and the browser trusts it with no warning. HTTPS has
 to be enabled for the tailnet in the admin console first; `tailscale cert <host>` fails with a link
 if it is not. Let's Encrypt rate limits can block new requests for up to 34 hours, so do not delete
 and reissue repeatedly.
 
 **The hostname becomes public.** Certificates are written to public Certificate Transparency logs,
-so `gus.tail0940f.ts.net` can be found by anyone who searches for it. The app behind it cannot be
+so `HOST.TAILNET.ts.net` can be found by anyone who searches for it. The app behind it cannot be
 reached from outside the tailnet, and the log holds the host name only, not an app path. But the
 *name* is not secret. Name machines neutrally before turning HTTPS on, and consider the tailnet-name
 randomisation in the admin console. (NW-NET-005)
@@ -108,8 +108,8 @@ it public. The moment it runs, a personal app with no login is reachable by anyo
 hostname. Funnel traffic carries no identity headers.
 
 **Before funnelling anything, it needs:** a login you did not write yourself, a rate limit, separate
-storage for your data and other people's, and a written reason. Daniel's public tunnel with five
-testers is the live example: his personal data and the testers' data must not share a database.
+storage for your data and other people's, and a written reason. A public tunnel with a handful of
+testers is the usual example: your own data and the testers' data must not share a database.
 
 Treat `funnel` the way you treat `rm -rf`. Not forbidden, just never casual. No script in an app
 may start it (NW-NET-003).

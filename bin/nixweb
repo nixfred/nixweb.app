@@ -211,12 +211,10 @@ cmd_standard(){
 
 cmd_hosts(){
   printf "\n  ${BOLD}Where you can serve this${RS}\n\n"
-  printf "  %-8s %s\n" "gus"   "desk machine, RTX 5070: GPU work, at-home tools"
-  printf "  %-8s %s\n" "vic"   "mobile Arch laptop: tools that follow the laptop"
-  printf "  %-8s %s\n" "fnix"  "MacBook Pro M4 Max: anything needing macOS or Apple APIs"
-  printf "  %-8s %s\n" "red"   "VPS: always on"
-  printf "  %-8s %s\n" "blu"   "VPS: always on"
-  printf "  %-8s %s\n" "whi"   "VPS: always on, holds the fleet secrets vault"
+  printf "  %-14s %s\n" "desk machine" "GPU work, at-home tools, wherever the data already lives"
+  printf "  %-14s %s\n" "laptop"       "tools that follow the laptop; down when the lid is shut"
+  printf "  %-14s %s\n" "Mac"          "anything needing macOS or Apple APIs"
+  printf "  %-14s %s\n" "VPS"          "always on: for tools that must outlive every laptop"
   printf "\n  this host: ${CY}%s${RS}\n\n" "$(ts_name)"
   note "Start where the data already is. Move to a VPS when 'is my laptop awake?' blocks you."
 }

@@ -7,7 +7,7 @@ Three layers. Each catches what the others cannot, and none of them replaces a p
 ```bash
 nixweb check mytool                     # Level 2, the default
 nixweb check mytool --level 3 --manual  # everything, and list what a person must do
-nixweb check mytool --url https://gus.tail0940f.ts.net:8731   # also test the HTTPS edge
+nixweb check mytool --url https://HOST.TAILNET.ts.net:8731   # also test the HTTPS edge
 nixweb check mytool --json              # for CI
 ```
 
@@ -75,8 +75,8 @@ the rules they prove.
 
 Remote debugging an iPhone needs Safari Web Inspector on a Mac: on the phone, Settings, Safari,
 Advanced, Web Inspector; on the Mac, Safari, Settings, Advanced, Show features for web developers;
-the phone then appears in the Develop menu. From Linux the practical route is a Mac in the fleet
-(`fnix`). `ios-webkit-debug-proxy` can reach the inspector from Linux, but it is fragile on current
+the phone then appears in the Develop menu. From Linux the practical route is a Mac you can reach
+over the tailnet. `ios-webkit-debug-proxy` can reach the inspector from Linux, but it is fragile on current
 iOS and the Chrome DevTools front end no longer speaks WebKit's protocol.
 
 ## Claiming a level

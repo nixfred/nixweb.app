@@ -25,7 +25,7 @@ the service worker cache and said it could not reach the host.
   than 50 entries (NW-OFF-005, NW-OFF-013).
 - `/ping` is **never cached**, because a cached 200 would tell you a dead host is alive.
 - **None of this runs over plain `http://`.** Browsers only register a service worker in a secure
-  context, and `http://gus.tail0940f.ts.net` is not one. That is why `nixweb serve` puts HTTPS in
+  context, and `http://HOST.TAILNET.ts.net` is not one. That is why `nixweb serve` puts HTTPS in
   front: see [04](04-https-and-tailscale.md).
 
 ## Do not trust `navigator.onLine`

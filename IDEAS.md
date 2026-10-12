@@ -1,7 +1,7 @@
 # Ten web apps worth building
 
-Every one of these is a **phone front end onto something that already exists** on gus, vic, fnix or a
-VPS. None of them needs a new backend. That is the point: the hard part is already built and sitting
+Every one of these is a **phone front end onto something that already exists** on a desk machine, a
+laptop, a Mac or a VPS. None of them needs a new backend. That is the point: the hard part is already built and sitting
 on a machine you own, and the only thing missing is a way to reach it from the sofa, the car or a
 coffee shop.
 
@@ -18,7 +18,7 @@ Banked, on-pace and time-to-reset across Claude, Codex, Grok and Kimi, on one sc
 today it only exists on a desktop bar. The decision it drives (start the big job, or wait for the
 reset) usually gets made away from the desk.
 
-**Serve from:** gus. **Hardest bit:** the quota readers are already there; the work is one JSON
+**Serve from:** the machine the plugin runs on. **Hardest bit:** the quota readers are already there; the work is one JSON
 endpoint and a layout that reads at a glance in sunlight.
 **Phone-only win:** a Home Screen icon that is red when you are behind pace.
 
@@ -33,7 +33,7 @@ been blocked longest. Tap one, read the last 40 lines, send a prompt back.
 **Why the phone:** this is the killer one. Agents block on a question and then idle for an hour
 because nobody is at the keyboard. Unblocking from a phone turns dead time into throughput.
 
-**Serve from:** gus (it can already reach vic and the rest over SSH).
+**Serve from:** the machine you work at (it can already reach the others over SSH).
 **Hardest bit:** sending a prompt is a write. Confirm before send, and never auto-approve.
 **Phone-only win:** answer `AskUserQuestion` prompts from anywhere.
 
@@ -48,7 +48,7 @@ failing check.
 **Why the phone:** reviewing a diff on a phone is miserable, but *deciding* on a PR you already
 reviewed is a ten-second job that currently waits until you are back at a desk.
 
-**Serve from:** gus. **Hardest bit:** an irreversible action behind a thumb. Require the PR to be
+**Serve from:** the machine that holds the worktrees. **Hardest bit:** an irreversible action behind a thumb. Require the PR to be
 green and show the SHA you are merging, exactly as the builder/reviewer loop already does.
 
 ---
@@ -67,14 +67,14 @@ most, and it is the thing you want when something feels wrong and you are not ho
 ---
 
 ## 5. Lamplight Remote
-**Source:** `~/Projects/lamplight` (gus-only; the Govee lamps are the physical Larry)
+**Source:** `~/Projects/lamplight` (single-machine; the Govee lamps are the physical Larry)
 
 Scenes, per-theme playlists, brightness, and the Larry presence colour, from the phone.
 
 **Why the phone:** you adjust lights while standing up, not while sitting at the machine that
 controls them. Right now the only control surface is the desk you just walked away from.
 
-**Serve from:** gus (it owns the lights). **Hardest bit:** the bars must never flash, which is a
+**Serve from:** the machine that owns the lights. **Hardest bit:** the bars must never flash, which is a
 standing rule; the phone must not become a way around it.
 
 ---
@@ -88,25 +88,24 @@ audio to Sonos.
 **Why the phone:** this is literally what phones are for, and the existing control lives in a bar
 widget on one machine.
 
-**Serve from:** gus. **Hardest bit:** the stacked-attenuation trap (silent but playing) should be
+**Serve from:** the machine that pipes the audio. **Hardest bit:** the stacked-attenuation trap (silent but playing) should be
 visible on the phone, not something you diagnose at the desk afterwards.
 
 ---
 
 ## 7. Idea Box
-**Source:** nothing yet. This is the one to steal from Daniel outright.
+**Source:** nothing yet. This is the one to build from scratch.
 
 Hold a button, talk. It transcribes locally, splits one rambling voice dump into separate numbered
 items, works out which project each belongs to, flags overlap with something you already logged,
 and files each one into the right repo's notes.
 
-**Why the phone:** ideas arrive in the car and in bed. Daniel's reported result was going to sleep
-earlier, because the thought was safely out of his head.
+**Why the phone:** ideas arrive in the car and in bed. One person who built this reported going to
+sleep earlier, because the thought was safely out of their head.
 
-**Serve from:** gus (local Whisper plus the GPU for classification: this should cost nothing per use).
+**Serve from:** a machine with a GPU (local Whisper plus GPU classification: this should cost nothing per use).
 **Hardest bit:** the classifier. Start with "ask me which project" and only automate once it is
 boringly right.
-**Credit where due:** this is Daniel's pattern, taken with permission and worth taking.
 
 ---
 
@@ -118,7 +117,7 @@ The VM lab from the phone: what is running, start a check, and look at the scree
 **Why the phone:** `shot` produces a PNG you are supposed to actually look at. Looking at a picture
 is the one thing a phone is strictly better at than a terminal.
 
-**Serve from:** gus. **Hardest bit:** the global lock. The app must show "queued behind another
+**Serve from:** the machine that runs the VMs. **Hardest bit:** the global lock. The app must show "queued behind another
 session" honestly rather than appearing hung, which is the same mistake the CLI already warns about.
 
 ---
@@ -126,12 +125,12 @@ session" honestly rather than appearing hung, which is the same mistake the CLI 
 ## 9. Pulse Pocket
 **Source:** `~/Projects/pulse` + NVML, the disk/power/RAM plugins
 
-Vitals for gus and vic: GPU, temps, NVMe health, battery, zram, the iGPU idle draw.
+Vitals for your machines: GPU, temps, NVMe health, battery, zram, the iGPU idle draw.
 
 **Why the phone:** you want this exactly when you are *not* at the machine, because the machine is
 doing something long and you are wondering whether to worry.
 
-**Serve from:** gus, polling vic over the tailnet.
+**Serve from:** the desk machine, polling the laptop over the tailnet.
 **Hardest bit:** NVMe SMART needs root. Expose one tiny read-only endpoint rather than giving the
 web app a sudo path.
 
@@ -147,7 +146,7 @@ owe, and the next session, with a box to log a win the moment it happens.
 because logging them means opening a laptop. A client telling you something is the moment to record
 it.
 
-**Serve from:** a VPS (`whi`), because this one should be up when the laptops are shut.
+**Serve from:** a VPS, because this one should be up when the laptops are shut.
 **Hardest bit:** it writes to the live client database. Draft-then-confirm, never straight-to-write,
 and the same Law 18 instinct that keeps email in drafts.
 

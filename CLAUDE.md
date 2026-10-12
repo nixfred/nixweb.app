@@ -6,9 +6,9 @@
 ## What this is
 
 A skeleton, a method and a standard for building phone apps that are **web apps**, served off a
-machine we already own and reached over Tailscale. Born 2026-10-08, when Daniel Lienemann told Fred
-that an iPhone app is just a web page added to the home screen, and Fred realised he had been avoiding
-Xcode for a year for no reason. On 2026-10-11 Fred asked for a standard, so other people can build
+machine we already own and reached over Tailscale. Born 2026-10-08, when a friend told Fred that an
+iPhone app is just a web page added to the home screen, and Fred realised he had been avoiding Xcode
+for a year for no reason. On 2026-10-11 Fred asked for a standard, so other people can build
 these correctly and be checked for it. That is `STANDARD.md`.
 
 ## Hard rules
@@ -41,6 +41,9 @@ these correctly and be checked for it. That is `STANDARD.md`.
     iPhone. A claim that rests on a secondary source says so in the rule's Why and in Appendix E.
 11. **No em-dashes.** Fred's law. `rules.json` is validated against them, and the generated documents
     are refused if they contain one.
+12. **Keep people and machines out of tracked files.** No person's name, no real host name and no
+    tailnet name in the README, the docs, IDEAS.md or this file. Use `HOST.TAILNET.ts.net` and generic
+    words (desk machine, laptop, VPS). The repo is meant to go public one day.
 
 ## Layout
 
@@ -58,9 +61,9 @@ IDEAS.md      ten apps worth building, all front ends onto existing projects
 
 ## Hosts
 
-gus (desk, RTX 5070), vic (mobile laptop), fnix (MacBook Pro M4 Max), and the VPS boxes red, blu,
-whi. Tailnet suffix `tail0940f.ts.net`. Start where the data is; move to a VPS when "is my laptop
-awake?" is the blocker.
+Any machine you own that runs Tailscale: a desk machine, a laptop, a Mac, an always-on VPS. Machine
+names and the tailnet name stay out of this repo; write `HOST.TAILNET.ts.net` as the placeholder.
+Start where the data is; move to a VPS when "is my laptop awake?" is the blocker.
 
 ## Testing
 
