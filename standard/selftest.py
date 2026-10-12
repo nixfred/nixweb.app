@@ -263,6 +263,10 @@ def main():
             print("  %s %s -> %s" % ("ok  " if got == "skip" else "FAIL", rid, got))
             if got != "skip":
                 problems.append("%s must be skipped under --no-live, got %s" % (rid, got))
+        crashed = [r["id"] for r in run_check(app, live=False) if "checker crashed" in (r.get("detail") or "")]
+        print("  %s no rule crashes under --no-live%s" % ("ok  " if not crashed else "FAIL", " (" + ", ".join(crashed) + ")" if crashed else ""))
+        if crashed:
+            problems.append("rules crash under --no-live: %s" % ", ".join(crashed))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

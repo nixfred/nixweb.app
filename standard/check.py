@@ -990,6 +990,8 @@ def sec_host_allowlist(ctx):
 
 @check
 def sec_csrf(ctx):
+    if ctx.live is None:
+        raise Skip(ctx.live_error)
     port = ctx.live.port
     base = {"Content-Type": "application/json"}
     path = "/api/nixweb-check"
